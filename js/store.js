@@ -10,7 +10,6 @@ export const state = {
 };
 
 const listeners = new Set();
-let saveTimer = null;
 let saveStatus = { text: '', error: false };
 
 function emptyDb() {
@@ -29,47 +28,43 @@ export const getSaveStatus = () => saveStatus;
 const uid = () => crypto.randomUUID();
 const nowIso = () => new Date().toISOString();
 
+const STORAGE_KEY = 'okan-pwa-db-v1';
+
+/** ブラウザ内（localStorage）から読む。無ければ空のデータで始める。壊れていたら読み込み失敗にして上書きしない。 */
 export async function loadStore() {
   try {
-    const res = await fetch('/api/data', { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    state.db = { ...emptyDb(), ...(await res.json()) };
+    const raw = localStorage.getItem(STORAGE_KEY);
+    state.db = raw ? { ...emptyDb(), ...JSON.parse(raw) } : emptyDb();
     state.loaded = true;
     state.loadError = null;
+    // ブラウザの「空き容量が足りないときの自動削除」対象から外す（許可されなくても動く）
+    navigator.storage?.persist?.().catch(() => {});
   } catch (e) {
-    // 読めなかったときに空データで上書きしないよう、保存は止める
+    // 壊れたデータを空で上書きしてしまわないよう、保存は止める
     state.loadError = e.message;
   }
   notify();
 }
 
 function persist() {
+  if (state.loaded) write();
   notify();
-  if (!state.loaded) return;
-  clearTimeout(saveTimer);
-  saveStatus = { text: '保存中…', error: false };
-  saveTimer = setTimeout(flush, 300);
 }
 
-export async function flush() {
+function write() {
   try {
-    const res = await fetch('/api/data', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state.db),
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.db));
     saveStatus = { text: '保存済み', error: false };
   } catch (e) {
     saveStatus = { text: '保存に失敗: ' + e.message, error: true };
   }
-  notify();
 }
 
-window.addEventListener('pagehide', () => {
-  if (!state.loaded || !saveTimer || saveStatus.text !== '保存中…') return;
-  fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.db), keepalive: true });
-});
+/** JSON読み込み後など、確実に書き込みたいとき用。 */
+export async function flush() {
+  write();
+  notify();
+}
 
 // ---------- 設定 ----------
 export function saveSettings(values) {
