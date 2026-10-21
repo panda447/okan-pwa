@@ -19,7 +19,7 @@ const currentTab = () => {
 function render() {
   if (state.loadError) {
     app.innerHTML = `<section class="card"><div class="eyebrow">ERROR</div><h2>データを読み込めませんでした</h2>
-      <p class="err">${esc(state.loadError)}</p><p class="muted">サーバ（<code>start.bat</code>）が動いているか確認して、再読み込みしてください。保存は止めてあります（空のデータで上書きしないため）。</p></section>`;
+      <p class="err">${esc(state.loadError)}</p><p class="muted">ブラウザの保存領域を読めませんでした。保存は止めてあります（壊れたデータを空で上書きしないため）。</p></section>`;
     return;
   }
   if (!state.loaded) {

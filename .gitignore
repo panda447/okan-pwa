@@ -1,5 +1,2 @@
-data/data.json
-data/data.json.tmp
-data/backups/
 __pycache__/
 *.pyc

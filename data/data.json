@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "settings": {
+    "tone": "kansai",
+    "interference_level": 3,
+    "sleep_time": "23:10",
+    "wake_time": "07:00",
+    "notification_enabled": true,
+    "updated_at": "2026-10-21T14:09:54.784Z"
+  },
+  "schedules": [],
+  "goals": [],
+  "goal_logs": [],
+  "weather_cache": [
+    {
+      "date": "2026-10-21",
+      "condition": "強い霧雨",
+      "temperature": 29.4,
+      "rain_probability": 100,
+      "fetched_at": "2026-10-21T13:52:13.990Z"
+    },
+    {
+      "date": "2026-10-22",
+      "condition": "薄曇り",
+      "temperature": 20.3,
+      "rain_probability": 14,
+      "fetched_at": "2026-10-21T13:52:13.990Z"
+    }
+  ],
+  "interventions": [
+    {
+      "id": "32f04e90-3fc0-4394-96fd-220d3134acae",
+      "trigger_type": "sleep",
+      "priority": "MEDIUM",
+      "message": "もう寝なさい。明日起きられへんで。",
+      "reason": "就寝時刻になった",
+      "sent_at": "2026-10-21T14:00:12.556Z",
+      "created_at": "2026-10-21T14:00:12.556Z"
+    }
+  ]
+}
