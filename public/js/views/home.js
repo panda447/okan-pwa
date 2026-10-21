@@ -4,6 +4,23 @@ import { currentSayings } from '../okan.js';
 import { state, todaysSchedules } from '../store.js';
 import { refreshForecast } from '../weather.js';
 import { esc, header } from '../ui.js';
+import { daysLeft, deadlineText, isActive, upcomingDeadlines } from '../../lib/shukatsu/model.js';
+
+/** 就活：今日の選考予定と、締切が近いもの。 */
+function shukatsuCard() {
+  const entries = state.db.entries;
+  if (!entries.length) return '';
+  const today = entries.filter((e) => isActive(e) && daysLeft(e.nextDate) === 0);
+  const near = upcomingDeadlines(entries).slice(0, 3);
+  const offers = entries.filter((e) => e.stage === '内定' && e.offerDecision === '検討中' && daysLeft(e.offerResponseDeadline) !== null && daysLeft(e.offerResponseDeadline) >= 0 && daysLeft(e.offerResponseDeadline) <= 7);
+  const rows = [
+    ...today.map((e) => `<div class="row"><span class="time">${esc(e.nextTime || '今日')}</span><div class="main"><b>${esc(e.company)}</b><span class="faint">${esc(e.nextPlan || e.stage)}</span></div></div>`),
+    ...offers.map((e) => `<div class="row"><span class="time dl critical">回答</span><div class="main"><b>${esc(e.company)}</b><span class="faint">内定の回答期限・${esc(deadlineText(e.offerResponseDeadline))}</span></div></div>`),
+    ...near.map(({ entry, left }) => `<div class="row"><span class="time dl ${left <= 1 ? 'critical' : 'soon'}">${esc(deadlineText(entry.deadline))}</span><div class="main"><b>${esc(entry.company)}</b><span class="faint">締切・${esc(entry.stage)}</span></div></div>`),
+  ].join('');
+  return `<div class="section"><div><span class="eyebrow">JOB HUNTING</span><h2>就活</h2></div><a href="#/shukatsu" class="muted">選考管理 ›</a></div>
+    <div class="list">${rows || `<div class="empty">今日の選考と、7日以内の締切はありません（進行中${entries.filter(isActive).length}件）。</div>`}</div>`;
+}
 
 function weatherCard() {
   const { status, data, error } = state.forecast;
@@ -33,6 +50,7 @@ export function renderHome(root) {
   root.innerHTML = `
     ${header({ eyebrow: 'OKAN SPACE', title: 'ホーム', sub: today })}
     <section class="card hero"><div class="eyebrow">おかんからの一言</div><p class="okan-say">${esc(currentSayings())}</p></section>
+    ${shukatsuCard()}
     ${weatherCard()}
     <div class="section"><div><span class="eyebrow">TODAY</span><h2>今日の予定</h2></div><span class="muted">${schedules.length}件</span></div>
     <div class="list">${schedules.length

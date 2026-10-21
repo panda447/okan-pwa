@@ -1,5 +1,6 @@
 // データの読み書き。DBの行は okan-app（Supabase）と同じ列名にしてあるので、移植したロジックがそのまま使える。
 import { startOfToday } from '../lib/datetime.js';
+import { isActive as isEntryActive } from '../lib/shukatsu/model.js';
 
 export const state = {
   db: emptyDb(),
@@ -13,7 +14,11 @@ const listeners = new Set();
 let saveStatus = { text: '', error: false };
 
 function emptyDb() {
-  return { version: 1, settings: null, schedules: [], goals: [], goal_logs: [], weather_cache: [], interventions: [] };
+  return {
+    version: 1, settings: null, schedules: [], goals: [], goal_logs: [], weather_cache: [], interventions: [],
+    // 就活（NEXTROUND由来の機能）。entries=選考、es_items=ESアーカイブ、fit=企業フィット、vault=暗号化したログイン情報
+    entries: [], es_items: [], fit: { answers: [], companies: [] }, vault: null,
+  };
 }
 
 export function subscribe(fn) {
@@ -157,6 +162,85 @@ export function upsertWeatherCache(days) {
   // 古い日付は溜めない（直近14日分だけ残す）
   state.db.weather_cache.sort((a, b) => a.date.localeCompare(b.date));
   state.db.weather_cache = state.db.weather_cache.slice(-14);
+  persist();
+}
+
+// ---------- 就活：選考 ----------
+/**
+ * 次の選考予定に時刻があれば、予定タブにも同じ予定を置く（おかんが60分前に声をかけられるように）。
+ * entry_id で紐づけ、選考側を直すたびに作り直す。手で予定を消しても、選考を保存し直せば戻る。
+ */
+function syncEntrySchedule(entry) {
+  const i = state.db.schedules.findIndex((s) => s.entry_id === entry.id);
+  const start = entry.nextDate && entry.nextTime ? new Date(`${entry.nextDate}T${entry.nextTime}:00`) : null;
+  if (!start || Number.isNaN(start.getTime()) || !isEntryActive(entry)) {
+    if (i >= 0) state.db.schedules.splice(i, 1);
+    return;
+  }
+  const values = { title: `${entry.company} ${entry.nextPlan || entry.stage}`, start_at: start.toISOString(), description: '就活の選考予定（選考管理から自動で作成）' };
+  if (i >= 0) Object.assign(state.db.schedules[i], values, { updated_at: nowIso() });
+  else state.db.schedules.push({ id: uid(), end_at: null, location: null, ...values, entry_id: entry.id, created_at: nowIso(), updated_at: nowIso() });
+}
+
+export function addEntry(values) {
+  const row = { ...values, id: uid(), created_at: nowIso(), updated_at: nowIso() };
+  state.db.entries.unshift(row);
+  syncEntrySchedule(row);
+  persist();
+  return row;
+}
+export function addEntries(list) {
+  for (const values of list) {
+    const row = { ...values, id: uid(), created_at: nowIso(), updated_at: nowIso() };
+    state.db.entries.unshift(row);
+    syncEntrySchedule(row);
+  }
+  persist();
+}
+export function updateEntry(id, patch) {
+  const i = state.db.entries.findIndex((e) => e.id === id);
+  if (i < 0) return;
+  state.db.entries[i] = { ...state.db.entries[i], ...patch, updated_at: nowIso() };
+  syncEntrySchedule(state.db.entries[i]);
+  persist();
+}
+/** ステージ変更など、エントリ全体を差し替えるとき用（moveStage の結果を入れる）。 */
+export function replaceEntry(entry) {
+  const i = state.db.entries.findIndex((e) => e.id === entry.id);
+  if (i < 0) return;
+  state.db.entries[i] = entry;
+  syncEntrySchedule(entry);
+  persist();
+}
+export function deleteEntry(id) {
+  state.db.entries = state.db.entries.filter((e) => e.id !== id);
+  state.db.schedules = state.db.schedules.filter((s) => s.entry_id !== id);
+  state.db.es_items = state.db.es_items.map((x) => (x.entry_id === id ? { ...x, entry_id: null } : x));
+  persist();
+}
+
+// ---------- 就活：ESアーカイブ ----------
+export function saveEsItem(values, id = null) {
+  if (id) {
+    const row = state.db.es_items.find((x) => x.id === id);
+    if (row) Object.assign(row, values, { updated_at: nowIso() });
+  } else {
+    state.db.es_items.unshift({ ...values, id: uid(), created_at: nowIso(), updated_at: nowIso() });
+  }
+  persist();
+}
+export function deleteEsItem(id) {
+  state.db.es_items = state.db.es_items.filter((x) => x.id !== id);
+  persist();
+}
+
+// ---------- 就活：企業フィット・保管庫 ----------
+export function saveFit(patch) {
+  state.db.fit = { ...state.db.fit, ...patch };
+  persist();
+}
+export function setVault(box) {
+  state.db.vault = box;
   persist();
 }
 

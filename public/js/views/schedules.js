@@ -4,6 +4,16 @@ import {
 } from '../../lib/datetime.js';
 import { addSchedule, deleteSchedule, sortedSchedules, state, updateSchedule } from '../store.js';
 import { $, $$, closeSheet, confirmDialog, esc, header, listOrEmpty, openSheet } from '../ui.js';
+import { eventsByDate } from '../../lib/shukatsu/model.js';
+import { openEntryForm } from './entryForm.js';
+
+const JOB_KIND = { deadline: '締切', offer: '回答期限', next: '選考', intern: 'インターン' };
+/** 就活の出来事。時刻つきの選考予定は予定にも入っているので、二重に出さない。 */
+function jobEvents() {
+  const map = eventsByDate(state.db.entries);
+  for (const [k, list] of map) map.set(k, list.filter((ev) => !(ev.kind === 'next' && ev.entry.nextTime)));
+  return map;
+}
 
 let calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let calSel = toDateInput(new Date());
@@ -75,13 +85,19 @@ export function openScheduleForm(id, presetDate) {
 function calendarBody() {
   const y = calMonth.getFullYear(), m = calMonth.getMonth();
   const days = new Set(state.db.schedules.map((s) => localDateKey(s.start_at)));
+  const jobs = jobEvents();
+  const jobDot = (key) => {
+    const list = jobs.get(key) || [];
+    if (!list.length) return '';
+    return `<i class="dot job ${list.some((ev) => ev.kind === 'deadline' || ev.kind === 'offer') ? '' : 'next'}"></i>`;
+  };
   const first = new Date(y, m, 1);
   const start = new Date(y, m, 1 - first.getDay());
   let cells = ['日', '月', '火', '水', '木', '金', '土'].map((d) => `<div class="h">${d}</div>`).join('');
   for (let i = 0; i < 42; i++) {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
     const key = toDateInput(d);
-    cells += `<button type="button" class="c ${d.getMonth() !== m ? 'off' : ''} ${key === toDateInput(new Date()) ? 'today' : ''} ${key === calSel ? 'sel' : ''}" data-day="${key}">${d.getDate()}${days.has(key) ? '<i class="dot"></i>' : ''}</button>`;
+    cells += `<button type="button" class="c ${d.getMonth() !== m ? 'off' : ''} ${key === toDateInput(new Date()) ? 'today' : ''} ${key === calSel ? 'sel' : ''}" data-day="${key}">${d.getDate()}${days.has(key) ? '<i class="dot"></i>' : ''}${jobDot(key)}</button>`;
   }
   const list = sortedSchedules().filter((s) => localDateKey(s.start_at) === calSel);
   return `
@@ -91,7 +107,9 @@ function calendarBody() {
     <div class="list" style="margin-top:6px">${list.length
       ? list.map((s) => `<div class="row click" data-edit="${esc(s.id)}"><span class="time">${esc(formatTimeRange(s.start_at, s.end_at))}</span><div class="main"><b>${esc(s.title)}</b></div></div>`).join('')
       : '<div class="empty">この日の予定はありません。</div>'}</div>
-    <button type="button" class="btn" id="calAdd">この日に予定を追加</button>`;
+    ${(jobs.get(calSel) || []).length ? `<div class="eyebrow">就活</div><div class="list" style="margin-top:6px">${jobs.get(calSel).map((ev) => `<div class="row click" data-entry="${esc(ev.entry.id)}"><span class="time">${esc(JOB_KIND[ev.kind])}</span><div class="main"><b>${esc(ev.entry.company)}</b><span class="faint">${esc(ev.label)}</span></div></div>`).join('')}</div>` : ''}
+    <div class="goal-actions"><button type="button" class="btn" id="calAdd">この日に予定を追加</button><button type="button" class="btn" id="calAddJob">この日が締切の選考を追加</button></div>
+    <p class="faint">●予定　<span style="color:var(--danger)">●</span>就活の締切・回答期限　<span style="color:var(--warn)">●</span>選考・インターン</p>`;
 }
 
 function openCalendar() {
@@ -106,6 +124,8 @@ function openCalendar() {
         $$('[data-day]', form).forEach((b) => b.addEventListener('click', () => { calSel = b.dataset.day; draw(); }));
         $$('[data-edit]', form).forEach((r) => r.addEventListener('click', () => openScheduleForm(r.dataset.edit)));
         $('#calAdd', form).addEventListener('click', () => openScheduleForm(null, calSel));
+        $('#calAddJob', form).addEventListener('click', () => openEntryForm(null, { deadline: calSel }));
+        $$('[data-entry]', form).forEach((r) => r.addEventListener('click', () => openEntryForm(r.dataset.entry)));
       },
     });
   };

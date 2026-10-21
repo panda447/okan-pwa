@@ -7,9 +7,13 @@ import { renderSchedules } from './views/schedules.js';
 import { renderGoals } from './views/goals.js';
 import { renderLog } from './views/log.js';
 import { renderSettings } from './views/settings.js';
+import { renderShukatsu } from './views/shukatsu.js';
+import { renderEs } from './views/es.js';
 
 const app = document.getElementById('app');
-const VIEWS = { home: renderHome, schedules: renderSchedules, goals: renderGoals, log: renderLog, settings: renderSettings };
+const VIEWS = { home: renderHome, schedules: renderSchedules, shukatsu: renderShukatsu, es: renderEs, goals: renderGoals, log: renderLog, settings: renderSettings };
+// 記録はタブに出さず、設定から開く。タブの点灯は設定に寄せる
+const TAB_OF = { log: 'settings' };
 
 const currentTab = () => {
   const name = location.hash.replace(/^#\//, '');
@@ -27,9 +31,9 @@ function render() {
     return;
   }
   const tab = currentTab();
-  document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
-  // 入力の途中（設定フォームなど）を、裏の更新で消さない
-  if (tab === 'settings' && app.contains(document.activeElement) && document.activeElement.matches('input, select, textarea')) return;
+  document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (TAB_OF[tab] ?? tab)));
+  // 入力の途中（設定フォーム・ES本文・検索など）を、裏の更新で消さない
+  if (app.contains(document.activeElement) && document.activeElement.matches('input, select, textarea')) return;
   const y = window.scrollY;
   VIEWS[tab](app);
   window.scrollTo(0, y);
