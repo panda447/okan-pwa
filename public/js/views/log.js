@@ -2,7 +2,7 @@ import { formatTime, groupByLocalDate } from '../../lib/datetime.js';
 import { state } from '../store.js';
 import { badge, esc, header, listOrEmpty } from '../ui.js';
 
-const LABELS = { sleep: '就寝', weather: '天気', schedule: '予定', goal: '目標', achievement: '達成' };
+const LABELS = { sleep: '就寝', weather: '天気', schedule: '予定', goal: '目標', achievement: '達成', deadline: '就活' };
 const MAX = 100; // 古い分まで遡らず、直近から一定件数だけ出す
 
 export function renderLog(root) {

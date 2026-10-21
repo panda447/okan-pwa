@@ -5,6 +5,24 @@ import { okanSettings } from '../okan.js';
 import { permission, plannedStatus, requestPermission, supported } from '../notify.js';
 import { flush, getSaveStatus, replaceAll, saveSettings, state } from '../store.js';
 import { $, esc, header, segmented, toast, confirmDialog } from '../ui.js';
+import { DEADLINE_LEAD_OPTIONS, toShukatsuPrefs } from '../../lib/shukatsu/okanDeadline.js';
+import { decodeSyncCode, encodeSyncCode } from '../syncCode.js';
+
+const LEAD_LABELS = { 0: 'オフ', 1: '前日', 3: '3日前', 7: '7日前' };
+const DATA_KEYS = ['schedules', 'goals', 'goal_logs', 'interventions'];
+/** 読み込むデータの形を確かめる。就活の項目は古い書き出しに無いので任意。 */
+function checkImported(d) {
+  if (!d || !DATA_KEYS.every((k) => Array.isArray(d[k]))) throw new Error('形式が違います（schedules / goals / goal_logs / interventions が必要）');
+  for (const k of ['entries', 'es_items']) if (k in d && !Array.isArray(d[k])) throw new Error(`${k} の形式が違います`);
+  return d;
+}
+async function confirmReplace(d) {
+  return confirmDialog({
+    title: 'データを置き換えますか？',
+    message: `今のデータ（予定${state.db.schedules.length}件・目標${state.db.goals.length}件・選考${state.db.entries.length}件・ES${state.db.es_items.length}件）が、読み込むデータ（予定${d.schedules.length}件・目標${d.goals.length}件・選考${(d.entries || []).length}件・ES${(d.es_items || []).length}件）で置き換わります。`,
+    okLabel: '置き換える',
+  });
+}
 
 /** 設計書§11のおせっかい度。数字だけでは伝わらないので言葉を添える。 */
 const LEVEL_DESCRIPTIONS = { 1: '必要最低限だけ伝えます。', 2: '少し親切に声をかけます。', 3: '標準的なおかんです。', 4: 'かなり世話を焼きます。', 5: 'かなりおせっかいです。' };
@@ -17,6 +35,7 @@ function previewText(tone, level) {
 
 export function renderSettings(root) {
   const s = okanSettings();
+  const job = toShukatsuPrefs(state.db.settings);
   const status = plannedStatus();
   const next = status.nextDate ? status.nextDate.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'なし';
   const save = getSaveStatus();
@@ -38,6 +57,11 @@ export function renderSettings(root) {
       <p class="muted" style="margin-bottom:6px">通知</p>
       ${segmented('notify', [{ value: 'on', label: 'オン' }, { value: 'off', label: 'オフ' }], s.notificationEnabled ? 'on' : 'off')}
       <p class="warn" id="notifyWarn" ${s.notificationEnabled ? 'hidden' : ''}>オフの間は、おかんが声をかける条件を満たしても通知が届きません。</p>
+      <p class="muted" style="margin:14px 0 6px">就活の締切を言い始める時期</p>
+      ${segmented('lead', DEADLINE_LEAD_OPTIONS.map((n) => ({ value: n, label: LEAD_LABELS[n] })), job.deadlineLeadDays)}
+      <p class="muted" style="margin:12px 0 6px">選考・説明会の当日に声をかける</p>
+      ${segmented('event', [{ value: 'on', label: 'オン' }, { value: 'off', label: 'オフ' }], job.eventNotice ? 'on' : 'off')}
+      <p class="faint">締切が今日・明日のとき、内定の回答期限が3日以内のときは、おせっかい度1でも声をかけます。</p>
       <p class="err" id="settingsError" role="alert" hidden></p>
       <div class="form-actions"><span id="savedNote" class="muted"></span><span class="grow"></span><button type="submit" class="btn primary">保存する</button></div>
     </form>
@@ -52,8 +76,16 @@ export function renderSettings(root) {
 
     <section class="card">
       <div class="eyebrow">DATA</div><h2>データ</h2>
-      <p class="muted">予定 ${state.db.schedules.length}件 / 目標 ${state.db.goals.length}件 / 履歴 ${state.db.interventions.length}件。このブラウザの中だけに保存されます（${esc(save.text || '—')}）。ブラウザのデータを消すと失われるので、ときどき「JSONを書き出す」でバックアップを取ってください。</p>
+      <p class="muted">予定 ${state.db.schedules.length}件 / 目標 ${state.db.goals.length}件 / 選考 ${state.db.entries.length}件 / ES ${state.db.es_items.length}件 / 履歴 ${state.db.interventions.length}件。このブラウザの中だけに保存されます（${esc(save.text || '—')}）。ブラウザのデータを消すと失われるので、ときどき「JSONを書き出す」でバックアップを取ってください。</p>
       <div class="goal-actions"><button class="btn" id="exportBtn">JSONを書き出す</button><button class="btn" id="importBtn">JSONを読み込む（置き換え）</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
+      <p class="muted" style="margin-top:14px">スマホとPCでデータを移すときは「同期コード」が手軽です（コピーして、もう一方の端末で貼り付ける）。マイページのログイン情報は暗号化されたまま入ります。</p>
+      <div class="goal-actions"><button class="btn" id="makeCode">同期コードをコピー</button><button class="btn" id="readCode">同期コードを貼り付けて読み込む</button></div>
+    </section>
+
+    <section class="card">
+      <div class="eyebrow">LOG</div><h2>おかんの記録</h2>
+      <p class="muted">おかんが声をかけた履歴（${state.db.interventions.length}件）。</p>
+      <a class="btn" href="#/log">記録を見る ›</a>
     </section>`;
 
   const form = $('#okanForm', root);
@@ -87,6 +119,8 @@ export function renderSettings(root) {
       sleep_time: String(fd.get('sleep')),
       wake_time: String(fd.get('wake')),
       notification_enabled: fd.get('notify') === 'on',
+      shukatsu_deadline_days: Number(fd.get('lead')),
+      shukatsu_event_notice: fd.get('event') === 'on',
     });
     // 通知を使う設定にしたら、許可を求める（ユーザー操作の直後だけ表示される）
     if (fd.get('notify') === 'on' && permission() === 'default') requestPermission().then(() => renderSettings(root));
@@ -108,17 +142,34 @@ export function renderSettings(root) {
     e.target.value = '';
     if (!file) return;
     try {
-      const d = JSON.parse(await file.text());
-      const keys = ['schedules', 'goals', 'goal_logs', 'interventions'];
-      if (!d || !keys.every((k) => Array.isArray(d[k]))) throw new Error('形式が違います（schedules / goals / goal_logs / interventions が必要）');
-      const ok = await confirmDialog({
-        title: 'データを置き換えますか？',
-        message: `今のデータ（予定${state.db.schedules.length}件・目標${state.db.goals.length}件）が、読み込むデータ（予定${d.schedules.length}件・目標${d.goals.length}件）で置き換わります。`,
-        okLabel: '置き換える',
-      });
-      if (!ok) return;
+      const d = checkImported(JSON.parse(await file.text()));
+      if (!(await confirmReplace(d))) return;
       replaceAll({ weather_cache: [], settings: null, ...d });
       await flush();
+    } catch (err) {
+      toast('読み込めませんでした', err.message);
+    }
+  });
+
+  $('#makeCode', root).addEventListener('click', async () => {
+    try {
+      const code = await encodeSyncCode(state.db);
+      await navigator.clipboard.writeText(code);
+      toast('同期コード', `コピーしました（${code.length.toLocaleString()}文字）。もう一方の端末で「貼り付けて読み込む」を押してください。`);
+    } catch (err) {
+      toast('コピーできませんでした', err.message);
+    }
+  });
+  $('#readCode', root).addEventListener('click', async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch { text = window.prompt('同期コードを貼り付けてください') || ''; }
+    if (!text.trim()) return;
+    try {
+      const d = checkImported(await decodeSyncCode(text));
+      if (!(await confirmReplace(d))) return;
+      replaceAll({ weather_cache: [], settings: null, ...d });
+      await flush();
+      toast('同期コード', '読み込みました。');
     } catch (err) {
       toast('読み込めませんでした', err.message);
     }
