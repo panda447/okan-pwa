@@ -236,3 +236,155 @@ input.inline { width: 100%; background: var(--panel2); border: 1px solid var(--l
 .cal button.c .dot.job { left: calc(50% + 6px); background: var(--danger); }
 .cal button.c .dot.job.next { background: var(--warn); }
 .cal button.c:has(.dot.job) .dot:not(.job) { left: calc(50% - 6px); }
+
+/* ---------- 動き（motion.js と組み合わせ） ---------- */
+:root { --burst-0: var(--accent); --burst-1: var(--warn); --burst-2: #ff6b81; --burst-3: #b79cff; --spring: cubic-bezier(.3, 1.4, .5, 1); --out: cubic-bezier(.2, .8, .2, 1); }
+@keyframes fade-up { from { opacity: 0; transform: translateY(12px); } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes grow-x { from { transform: scaleX(0); } }
+@keyframes ring { from { stroke-dashoffset: 100; } }
+@keyframes pop { from { transform: scale(0); opacity: 0; } 70% { transform: scale(1.25); } }
+@keyframes char { from { opacity: 0; filter: blur(4px); } }
+@keyframes ripple-k { to { transform: scale(1); opacity: 0; } }
+@keyframes bump { 35% { transform: scale(1.012); } }
+@keyframes sheet-up { from { transform: translateY(36px) scale(.98); opacity: 0; } }
+@keyframes bob { 50% { transform: translateY(-3px); } }
+@keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+@keyframes shine { from { transform: translateX(-120%) skewX(-20deg); } to { transform: translateX(260%) skewX(-20deg); } }
+@keyframes tab-pop { 40% { transform: translateY(-3px) scale(1.08); } }
+@keyframes fly { 55% { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 1; } to { transform: translate(var(--x), calc(var(--y) + 46px)) rotate(var(--r)); opacity: 0; } }
+
+/* タブを開いたときの入場：子を順番に浮かせ、棒は左から伸ばす */
+.enter > * { animation: fade-up .5s var(--out) both; animation-delay: calc(var(--i, 0) * 55ms); }
+.enter .bar i { transform-origin: left; animation: grow-x .9s var(--out) both; animation-delay: calc(var(--i, 0) * 55ms + .25s); }
+.enter .metrics > div { animation: fade-up .45s var(--out) both; }
+.enter .metrics > div:nth-child(2) { animation-delay: .08s; } .enter .metrics > div:nth-child(3) { animation-delay: .16s; }
+.enter .okan-say span { animation: char .4s ease-out both; animation-delay: calc(var(--c) * 30ms + .3s); }
+.enter .card.hero::after { animation: shine 1.4s .4s ease-in-out both; }
+.bar i { transition: width .7s var(--out); }
+.bump { animation: bump .5s var(--out); }
+
+/* おかんの顔（まばたき・ゆらぎ） */
+.card.hero { position: relative; overflow: hidden; }
+.sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.card.hero::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(97, 244, 222, .12), transparent); transform: translateX(-120%); pointer-events: none; }
+.okan-face { float: right; position: relative; width: 46px; height: 46px; margin: 0 0 6px 10px; border-radius: 50%; background: var(--accent-soft); border: 1.5px solid var(--accent); animation: bob 3.2s ease-in-out infinite; }
+.okan-face i { position: absolute; top: 17px; width: 6px; height: 8px; border-radius: 3px; background: var(--accent); animation: blink 4.5s infinite; }
+.okan-face i:first-child { left: 13px; } .okan-face i:nth-child(2) { right: 13px; }
+.okan-face b { position: absolute; left: 50%; bottom: 10px; width: 14px; height: 7px; margin-left: -7px; border: 2px solid var(--accent); border-top: 0; border-radius: 0 0 10px 10px; }
+
+/* 押した感触：縮む＋波紋 */
+.btn, .chip, .dl-card, .lane-card, .scale button { position: relative; overflow: hidden; transition: transform .15s var(--out), border-color .2s, background-color .2s; }
+.btn:active, .chip:active, .dl-card:active, .lane-card:active, .scale button:active, .cal button.c:active { transform: scale(.95); }
+.ripple { position: absolute; border-radius: 50%; background: currentColor; opacity: .25; transform: scale(0); pointer-events: none; animation: ripple-k .6s ease-out forwards; }
+.cal button.c { overflow: hidden; transition: transform .15s var(--out); }
+@media (hover: hover) {
+  .entry, .card, .lane-card, .dl-card { transition: transform .2s var(--out), border-color .2s, box-shadow .2s; }
+  .entry:hover, .dl-card:hover, .lane-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0, 0, 0, .35); }
+  .row.click { transition: background-color .2s, padding-left .2s var(--out); }
+  .row.click:hover { padding-left: 18px; }
+}
+.chip.on { animation: tab-pop .35s var(--out); }
+
+/* タブバー：点いているタブへ滑るハイライト */
+.tabbar a.on { background: none; }
+.tabbar a.on::before { content: none; }
+.tabbar a { z-index: 1; overflow: hidden; transition: color .25s; }
+.tabbar a.on { animation: tab-pop .4s var(--out); }
+.tab-ind { position: absolute; top: 0; bottom: 0; left: 0; width: calc(100% / 6); background: var(--accent-soft); transform: translateX(calc(var(--tab-i, 0) * 100%)); transition: transform .45s var(--spring); pointer-events: none; }
+.tab-ind::before { content: ""; position: absolute; top: 0; left: 18%; right: 18%; height: 2px; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+
+/* シート：下からせり上がる。中身の差し替え時もふわっと */
+dialog[open] { animation: sheet-up .38s var(--out); }
+dialog[open]::backdrop { animation: fade .3s ease-out; }
+#sheetForm > *, #confirmForm > * { animation: fade-up .35s var(--out) both; }
+.toast { animation: sheet-up .35s var(--spring); }
+
+/* 紙吹雪 */
+.burst { position: fixed; z-index: 60; width: 0; height: 0; pointer-events: none; }
+.burst i { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 2px; background: var(--c); animation: fly .9s var(--out) forwards; }
+
+/* フィット診断のレーダー：中心から広がる */
+.radar .co, .radar .me { transform-origin: 0 0; animation: pop .9s var(--out) both; }
+.radar .me { animation-delay: .15s; }
+.radar text { animation: fade .6s .4s both; }
+
+/* ---------- 分析のインフォグラフィック（infographic.js） ---------- */
+.ig { --seg-before: var(--faint); --seg-es: #7ad7ff; --seg-web: var(--violet); --seg-gd: #ff9f6b; --seg-iv: var(--accent); --seg-wait: var(--warn); --seg-win: var(--ok); --seg-closed: #34404d; }
+.ig > * { animation: fade-up .45s var(--out) both; }
+.ig-title { margin: 20px 0 8px; }
+.ig-title .h3 { margin-top: 2px; }
+
+.ig-hero { display: grid; grid-template-columns: 136px 1fr; gap: 16px; align-items: center; margin: 14px 0 4px; padding: 14px; background: linear-gradient(135deg, rgba(54, 211, 153, .08), var(--panel) 60%); border: 1px solid var(--line); border-radius: var(--radius); }
+.ig-ring { position: relative; width: 136px; aspect-ratio: 1; }
+.ig-ring svg { width: 100%; transform: rotate(-90deg); display: block; }
+.ig-ring circle { fill: none; stroke-width: 12; stroke-dasharray: 100; }
+.ig-ring .track { stroke: var(--line); stroke-dasharray: none; }
+.ig-ring .lose { stroke: rgba(255, 107, 129, .45); animation: ring 1s var(--out) both; }
+.ig-ring .win { stroke: var(--ok); stroke-linecap: round; animation: ring 1.3s .25s var(--out) both; filter: drop-shadow(0 0 6px rgba(54, 211, 153, .5)); }
+.ig-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ig-ring-center b { font-size: 34px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ok); }
+.ig-ring-center b small { font-size: 15px; margin-left: 1px; }
+.ig-ring-center > span { font-size: 11px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+.ig-kpis > div { display: flex; align-items: baseline; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.ig-kpis span { flex: 1; font-size: 12px; color: var(--muted); font-weight: 700; }
+.ig-kpis b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.ig-kpis b span { font-size: inherit; color: inherit; }
+.ig-kpis em { font-size: 12px; color: var(--muted); font-style: normal; }
+.ig-legend { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.ig-legend i, .ig-keys i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.ig-legend i.win { background: var(--ok); } .ig-legend i.lose { background: rgba(255, 107, 129, .6); }
+
+.ig-stack { display: flex; gap: 2px; height: 22px; border-radius: 8px; overflow: hidden; background: var(--line); }
+.ig-stack i { display: block; height: 100%; min-width: 4px; transform-origin: left; animation: grow-x .7s var(--out) both; animation-delay: calc(var(--d) * 90ms + .2s); }
+.ig-keys { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.ig-keys span { animation: fade-up .4s var(--out) both; animation-delay: calc(var(--d) * 90ms + .3s); }
+.ig-keys b { color: var(--text); }
+.seg-before { background: var(--seg-before); } .seg-es { background: var(--seg-es); } .seg-web { background: var(--seg-web); } .seg-gd { background: var(--seg-gd); }
+.seg-iv { background: var(--seg-iv); } .seg-wait { background: var(--seg-wait); } .seg-win { background: var(--seg-win); } .seg-closed { background: var(--seg-closed); }
+
+.ig-funnel { padding: 4px 0; }
+.ig-layer { display: grid; grid-template-columns: 86px 1fr 70px; align-items: center; gap: 8px; animation: fade-up .45s var(--out) both; animation-delay: calc(var(--d) * 130ms + .15s); }
+.ig-layer .lbl { font-size: 12px; font-weight: 700; color: var(--muted); text-align: right; line-height: 1.3; }
+.ig-layer .shape-wrap { display: flex; justify-content: center; height: 30px; }
+.ig-layer .shape { height: 100%; background: linear-gradient(90deg, rgba(97, 244, 222, .45), var(--accent)); clip-path: polygon(0 0, 100% 0, calc(100% - var(--cut)) 100%, var(--cut) 100%); transform-origin: center; animation: grow-x .8s var(--out) both; animation-delay: calc(var(--d) * 130ms + .25s); }
+.ig-layer .shape.last { background: linear-gradient(90deg, rgba(54, 211, 153, .5), var(--ok)); filter: drop-shadow(0 0 8px rgba(54, 211, 153, .45)); }
+.ig-layer .val { font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.ig-layer .val small { display: block; font-size: 11px; color: var(--muted); font-weight: 700; }
+.ig-step { margin: 1px 78px 1px 94px; text-align: center; font-size: 11px; color: var(--faint); animation: fade .4s both; animation-delay: calc(var(--d) * 130ms + .45s); }
+.ig-step b { color: var(--accent); }
+
+.ig-gauges { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.ig-gauge { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px 8px; text-align: center; animation: fade-up .45s var(--out) both; animation-delay: calc(var(--d) * 90ms + .1s); }
+.ig-gauge svg { display: block; width: 100%; max-width: 150px; margin: 0 auto; }
+.ig-gauge path { fill: none; stroke-width: 11; stroke-linecap: round; }
+.ig-gauge .track { stroke: var(--line); }
+.ig-gauge .fill { stroke: var(--accent); stroke-dasharray: 100; animation: ring 1.1s var(--out) both; animation-delay: calc(var(--d) * 90ms + .3s); }
+.ig-gauge .fill.good { stroke: var(--ok); } .ig-gauge .fill.low { stroke: var(--danger); }
+.ig-gauge b { display: block; margin-top: -24px; font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.ig-gauge > span { display: block; font-weight: 800; font-size: 13px; margin-top: 2px; }
+.ig-gauge em { display: block; font-style: normal; font-size: 11px; color: var(--faint); }
+.ig-gauge.none { opacity: .6; }
+.ig-callout { margin-top: 10px; border-left: 3px solid var(--warn); background: rgba(255, 207, 90, .08); border-radius: 10px; padding: 8px 12px; animation: fade-up .45s .55s var(--out) both; }
+.ig-callout p { margin: 2px 0 0; font-size: 14px; }
+.ig-callout b { color: var(--warn); }
+
+.row-ind { margin: 10px 0 14px; animation: fade-up .45s var(--out) both; animation-delay: calc(var(--d) * 100ms + .1s); }
+.row-ind .top { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+.ig .bar i { transform-origin: left; animation: grow-x .8s var(--out) both; animation-delay: .3s; }
+.row-ind .dots { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.row-ind .dots i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--ok); animation: pop .35s var(--out) both; animation-delay: calc(var(--k) * 40ms + var(--d) * 100ms + .35s); }
+.row-ind .dots i.on { background: var(--ok); box-shadow: 0 0 6px rgba(54, 211, 153, .6); }
+.row-ind .dots small { font-size: 11px; color: var(--faint); margin-left: 6px; }
+
+@media (max-width: 380px) {
+  .ig-hero { grid-template-columns: 1fr; justify-items: center; }
+  .ig-kpis { width: 100%; }
+  .ig-layer { grid-template-columns: 72px 1fr 62px; }
+  .ig-step { margin: 1px 70px 1px 80px; }
+}
+
+/* 動きを減らす設定の端末では、全部止めて最終状態だけ見せる */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

@@ -3,6 +3,7 @@ import { formatProgress, summarizeGoalProgress } from '../../lib/goalProgress.js
 import { addGoal, addGoalLog, deleteGoal, deleteGoalLog, state, updateGoal } from '../store.js';
 import { $, $$, closeSheet, confirmDialog, esc, header, listOrEmpty, openSheet } from '../ui.js';
 import { startOfWeek } from '../../lib/datetime.js';
+import { burst } from '../motion.js';
 
 /** 空欄は null、正の整数以外は 'invalid'。 */
 function parseTarget(text) {
@@ -49,9 +50,9 @@ export function openGoalForm(id) {
 
 function goalCard(goal) {
   const progress = summarizeGoalProgress(goal, state.db.goal_logs);
-  const bars = progress.map((p) => `
-    <div class="progress"><div class="top"><span>${esc(formatProgress(p))}</span>${p.ratio !== null ? `<span>${Math.round(p.ratio * 100)}%</span>` : ''}</div>
-    ${p.ratio === null ? '' : `<div class="bar ${p.ratio >= 1 ? 'done' : ''}"><i style="width:${Math.round(p.ratio * 100)}%"></i></div>`}</div>`).join('');
+  const bars = progress.map((p, i) => `
+    <div class="progress"><div class="top"><span>${esc(formatProgress(p))}</span>${p.ratio !== null ? `<span><span data-num="${Math.round(p.ratio * 100)}" data-k="goal-${esc(goal.id)}-${i}">${Math.round(p.ratio * 100)}</span>%</span>` : ''}</div>
+    ${p.ratio === null ? '' : `<div class="bar ${p.ratio >= 1 ? 'done' : ''}"><i data-k="goal-${esc(goal.id)}-${i}" style="width:${Math.round(p.ratio * 100)}%"></i></div>`}</div>`).join('');
   // 取り消しは「今週いちばん新しい記録」を1件消す
   const latest = state.db.goal_logs
     .filter((l) => l.goal_id === goal.id && new Date(l.logged_at) >= startOfWeek())
@@ -71,6 +72,6 @@ export function renderGoals(root) {
     ${state.db.goals.length ? state.db.goals.map(goalCard).join('') : listOrEmpty('', ['まだ目標がありません。', '右上の＋から追加してください。'])}`;
   $('#addGoal', root).addEventListener('click', () => openGoalForm(null));
   $$('[data-edit]', root).forEach((b) => b.addEventListener('click', () => openGoalForm(b.dataset.edit)));
-  $$('[data-done]', root).forEach((b) => b.addEventListener('click', () => addGoalLog(b.dataset.done, 1)));
+  $$('[data-done]', root).forEach((b) => b.addEventListener('click', () => { burst(b); addGoalLog(b.dataset.done, 1); }));
   $$('[data-undo]', root).forEach((b) => b.addEventListener('click', () => deleteGoalLog(b.dataset.undo)));
 }
