@@ -52,7 +52,7 @@ export function renderSettings(root) {
 
     <section class="card">
       <div class="eyebrow">DATA</div><h2>データ</h2>
-      <p class="muted">予定 ${state.db.schedules.length}件 / 目標 ${state.db.goals.length}件 / 履歴 ${state.db.interventions.length}件。このPCの <code>data/data.json</code> に保存されます（${esc(save.text || '—')}）。</p>
+      <p class="muted">予定 ${state.db.schedules.length}件 / 目標 ${state.db.goals.length}件 / 履歴 ${state.db.interventions.length}件。このブラウザの中だけに保存されます（${esc(save.text || '—')}）。ブラウザのデータを消すと失われるので、ときどき「JSONを書き出す」でバックアップを取ってください。</p>
       <div class="goal-actions"><button class="btn" id="exportBtn">JSONを書き出す</button><button class="btn" id="importBtn">JSONを読み込む（置き換え）</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
     </section>`;
 

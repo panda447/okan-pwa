@@ -1,6 +1,5 @@
 /* おかんアプリのService Worker。
  * 役割は2つだけ：①画面を端末に控える（オフラインでも開ける） ②通知を表示する。
- * /api/ は常にネットワークへ。データのキャッシュはしない（古い予定を見せないため）。
  */
 const CACHE = 'okan-pwa-v1';
 const SHELL = [
@@ -25,7 +24,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  if (event.request.method !== 'GET' || url.origin !== location.origin) return;
   // 画面ファイルはネットワーク優先（更新がすぐ反映される）、繋がらなければ控えを使う
   event.respondWith(
     fetch(event.request)
