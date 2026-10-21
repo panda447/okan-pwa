@@ -2,6 +2,7 @@
 import { AXES, QUESTIONS, analyzeCompanyText, fitReport, isProfileComplete, profileScores, radarPoints } from '../../lib/shukatsu/fit.js';
 import { saveFit, state } from '../store.js';
 import { $, $$, esc, openSheet, confirmDialog } from '../ui.js';
+import { countUp } from '../motion.js';
 
 let quizIndex = 0;
 let resultId = null;
@@ -23,7 +24,7 @@ function resultHtml(item, profile) {
   const report = fitReport(profile, analyzeCompanyText(item.text));
   const list = (title, rows, empty) => `<div class="eyebrow" style="margin-top:12px">${esc(title)}</div>${rows.length ? `<ul>${rows.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`}`;
   return `
-    <div class="score-row"><div class="score">${report.score}<small>/100</small></div><div><b>${esc(item.name)}</b><div class="muted">推定の確からしさ：${esc(report.confidence)}${report.confidence === '低' ? '（文章が短いかキーワードが少ない。理念・求める人物像・社員インタビューなどを足すと上がる）' : ''}</div></div></div>
+    <div class="score-row"><div class="score"><span data-count="${report.score}">${report.score}</span><small>/100</small></div><div><b>${esc(item.name)}</b><div class="muted">推定の確からしさ：${esc(report.confidence)}${report.confidence === '低' ? '（文章が短いかキーワードが少ない。理念・求める人物像・社員インタビューなどを足すと上がる）' : ''}</div></div></div>
     ${radar(profile, analyzeCompanyText(item.text).emphasis)}
     ${list('STRENGTHS 合っているところ', report.strengths, '企業が強く求める軸で、目立って強いところは見つかりませんでした。')}
     ${list('GAPS ずれているところ', report.gaps, '大きなずれは見つかりませんでした。')}
@@ -85,7 +86,7 @@ function openResult() {
   const item = state.db.fit.companies.find((c) => c.id === resultId);
   if (!item) return;
   if (!isProfileComplete(state.db.fit.answers)) return;
-  openSheet({ title: '企業フィット診断', bodyHtml: resultHtml(item, profileScores(state.db.fit.answers)), submitLabel: '閉じる', onSubmit() {} });
+  openSheet({ title: '企業フィット診断', bodyHtml: resultHtml(item, profileScores(state.db.fit.answers)), submitLabel: '閉じる', onSubmit() {}, onOpen: countUp });
 }
 
 function openQuiz() {
