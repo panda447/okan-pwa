@@ -1,0 +1,173 @@
+// データの読み書き。DBの行は okan-app（Supabase）と同じ列名にしてあるので、移植したロジックがそのまま使える。
+import { startOfToday } from '../lib/datetime.js';
+
+export const state = {
+  db: emptyDb(),
+  loaded: false,
+  loadError: null,
+  /** 画面に出す天気。DBではなく取得結果（weather.js が入れる）。 */
+  forecast: { status: 'idle', data: null, error: null },
+};
+
+const listeners = new Set();
+let saveTimer = null;
+let saveStatus = { text: '', error: false };
+
+function emptyDb() {
+  return { version: 1, settings: null, schedules: [], goals: [], goal_logs: [], weather_cache: [], interventions: [] };
+}
+
+export function subscribe(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+export function notify() {
+  listeners.forEach((fn) => fn());
+}
+export const getSaveStatus = () => saveStatus;
+
+const uid = () => crypto.randomUUID();
+const nowIso = () => new Date().toISOString();
+
+export async function loadStore() {
+  try {
+    const res = await fetch('/api/data', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    state.db = { ...emptyDb(), ...(await res.json()) };
+    state.loaded = true;
+    state.loadError = null;
+  } catch (e) {
+    // 読めなかったときに空データで上書きしないよう、保存は止める
+    state.loadError = e.message;
+  }
+  notify();
+}
+
+function persist() {
+  notify();
+  if (!state.loaded) return;
+  clearTimeout(saveTimer);
+  saveStatus = { text: '保存中…', error: false };
+  saveTimer = setTimeout(flush, 300);
+}
+
+export async function flush() {
+  try {
+    const res = await fetch('/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.db),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    saveStatus = { text: '保存済み', error: false };
+  } catch (e) {
+    saveStatus = { text: '保存に失敗: ' + e.message, error: true };
+  }
+  notify();
+}
+
+window.addEventListener('pagehide', () => {
+  if (!state.loaded || !saveTimer || saveStatus.text !== '保存中…') return;
+  fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.db), keepalive: true });
+});
+
+// ---------- 設定 ----------
+export function saveSettings(values) {
+  state.db.settings = { ...(state.db.settings || {}), ...values, updated_at: nowIso() };
+  persist();
+}
+
+// ---------- 予定 ----------
+export const sortedSchedules = () => [...state.db.schedules].sort((a, b) => a.start_at.localeCompare(b.start_at));
+
+export function todaysSchedules() {
+  const start = startOfToday();
+  const end = new Date(start.getTime() + 86400000);
+  return sortedSchedules().filter((s) => {
+    const t = new Date(s.start_at);
+    return t >= start && t < end;
+  });
+}
+
+export function addSchedule(values) {
+  const row = { id: uid(), description: null, end_at: null, location: null, ...values, created_at: nowIso(), updated_at: nowIso() };
+  state.db.schedules.push(row);
+  persist();
+  return row;
+}
+export function updateSchedule(id, patch) {
+  const row = state.db.schedules.find((s) => s.id === id);
+  if (!row) return;
+  Object.assign(row, patch, { updated_at: nowIso() });
+  persist();
+}
+export function deleteSchedule(id) {
+  state.db.schedules = state.db.schedules.filter((s) => s.id !== id);
+  persist();
+}
+
+// ---------- 目標 ----------
+export function addGoal(values) {
+  const row = { id: uid(), description: null, deadline: null, daily_target: null, weekly_target: null, ...values, created_at: nowIso(), updated_at: nowIso() };
+  state.db.goals.unshift(row);
+  persist();
+  return row;
+}
+export function updateGoal(id, patch) {
+  const row = state.db.goals.find((g) => g.id === id);
+  if (!row) return;
+  Object.assign(row, patch, { updated_at: nowIso() });
+  persist();
+}
+export function deleteGoal(id) {
+  state.db.goals = state.db.goals.filter((g) => g.id !== id);
+  state.db.goal_logs = state.db.goal_logs.filter((l) => l.goal_id !== id); // 親と一緒に消える（DBのcascade相当）
+  persist();
+}
+export function addGoalLog(goalId, value = 1) {
+  const row = { id: uid(), goal_id: goalId, value, logged_at: nowIso() };
+  state.db.goal_logs.push(row);
+  persist();
+  return row;
+}
+export function deleteGoalLog(id) {
+  state.db.goal_logs = state.db.goal_logs.filter((l) => l.id !== id);
+  persist();
+}
+
+// ---------- 介入履歴 ----------
+export function recordIntervention({ trigger, message, sentAt }) {
+  const row = {
+    id: uid(),
+    trigger_type: trigger.type,
+    priority: trigger.priority,
+    message,
+    reason: trigger.reason ?? null,
+    sent_at: sentAt.toISOString(),
+    created_at: nowIso(),
+  };
+  state.db.interventions.push(row);
+  persist();
+  return row;
+}
+
+// ---------- 天気キャッシュ ----------
+export function upsertWeatherCache(days) {
+  for (const day of days) {
+    const row = { date: day.date, condition: day.condition, temperature: day.temperature, rain_probability: day.rainProbability, fetched_at: nowIso() };
+    const i = state.db.weather_cache.findIndex((c) => c.date === day.date);
+    if (i >= 0) state.db.weather_cache[i] = row;
+    else state.db.weather_cache.push(row);
+  }
+  // 古い日付は溜めない（直近14日分だけ残す）
+  state.db.weather_cache.sort((a, b) => a.date.localeCompare(b.date));
+  state.db.weather_cache = state.db.weather_cache.slice(-14);
+  persist();
+}
+
+/** 全データを置き換える（JSON読み込み用）。 */
+export function replaceAll(db) {
+  state.db = { ...emptyDb(), ...db };
+  state.loaded = true;
+  persist();
+}
