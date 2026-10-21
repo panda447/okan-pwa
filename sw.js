@@ -1,12 +1,15 @@
 /* おかんアプリのService Worker。
  * 役割は2つだけ：①画面を端末に控える（オフラインでも開ける） ②通知を表示する。
  */
-const CACHE = 'okan-pwa-v1';
+const CACHE = 'okan-pwa-v2';
 const SHELL = [
   './', 'index.html', 'style.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png',
   'js/main.js', 'js/store.js', 'js/ui.js', 'js/weather.js', 'js/okan.js', 'js/notify.js',
+  'js/syncCode.js',
   'js/views/home.js', 'js/views/schedules.js', 'js/views/goals.js', 'js/views/log.js', 'js/views/settings.js',
+  'js/views/shukatsu.js', 'js/views/entryForm.js', 'js/views/fit.js', 'js/views/es.js',
   'lib/datetime.js', 'lib/goalProgress.js',
+  'lib/shukatsu/model.js', 'lib/shukatsu/importer.js', 'lib/shukatsu/esReview.js', 'lib/shukatsu/fit.js', 'lib/shukatsu/okanDeadline.js', 'lib/shukatsu/vault.js',
   'lib/okan/types.js', 'lib/okan/rules.js', 'lib/okan/templates.js', 'lib/okan/engine.js', 'lib/okan/suppression.js', 'lib/okan/schedulePlan.js',
 ];
 
