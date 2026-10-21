@@ -2,6 +2,7 @@ import { loadStore, state, subscribe } from './store.js';
 import { refreshForecast } from './weather.js';
 import { startNotifier } from './notify.js';
 import { esc } from './ui.js';
+import { countUp, installRipple, morph, moveTabIndicator, playEnter } from './motion.js';
 import { renderHome } from './views/home.js';
 import { renderSchedules } from './views/schedules.js';
 import { renderGoals } from './views/goals.js';
@@ -14,6 +15,9 @@ const app = document.getElementById('app');
 const VIEWS = { home: renderHome, schedules: renderSchedules, shukatsu: renderShukatsu, es: renderEs, goals: renderGoals, log: renderLog, settings: renderSettings };
 // 記録はタブに出さず、設定から開く。タブの点灯は設定に寄せる
 const TAB_OF = { log: 'settings' };
+
+let shownTab = null; // 入場アニメはタブが変わったときだけ（60秒ごとの描き直しでは動かさない）
+const tabbar = document.getElementById('tabbar');
 
 const currentTab = () => {
   const name = location.hash.replace(/^#\//, '');
@@ -32,14 +36,19 @@ function render() {
   }
   const tab = currentTab();
   document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (TAB_OF[tab] ?? tab)));
+  moveTabIndicator(tabbar);
   // 入力の途中（設定フォーム・ES本文・検索など）を、裏の更新で消さない
   if (app.contains(document.activeElement) && document.activeElement.matches('input, select, textarea')) return;
   const y = window.scrollY;
   VIEWS[tab](app);
   window.scrollTo(0, y);
+  const entering = tab !== shownTab;
+  if (entering) { shownTab = tab; playEnter(app); countUp(app); }
+  morph(app, entering);
 }
 
 subscribe(render);
+installRipple();
 window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
 
 // 就寝・予定は時刻で変わるので、開いたままでも「おかんの一言」を進める

@@ -1,6 +1,6 @@
 // 就活タブ。選考の一覧・パイプライン・内定管理・企業フィット、締切、分析、取り込み、マイページ情報。
 import {
-  FILTERS, PIPELINE_COLUMNS, WIN_STAGES, OFFER_DECISIONS, analyze, daysLeft, deadlineLevel, deadlineText, failStage, isActive,
+  FILTERS, PIPELINE_COLUMNS, WIN_STAGES, OFFER_DECISIONS, daysLeft, deadlineLevel, deadlineText, failStage, isActive,
   isPostWinDeclined, matchesFilter, moveStage, nextStage, normalizeEntry, offerSummary, overdueDeadlines, pipelineColumn,
   previousStage, progressPercent, resultStages, searchText, seedHistory, sortEntries, stageTone, upcomingDeadlines,
 } from '../../lib/shukatsu/model.js';
@@ -10,6 +10,8 @@ import { addEntries, replaceEntry, setVault, state, updateEntry } from '../store
 import { openEntryForm } from './entryForm.js';
 import { renderFit } from './fit.js';
 import { $, $$, closeSheet, confirmDialog, esc, header, openSheet, segmented, toast } from '../ui.js';
+import { burst, playEnter } from '../motion.js';
+import { analyticsHtml, animateInfographic } from '../infographic.js';
 
 const ui = { view: 'list', filter: 'active', query: '', sort: 'deadline', analysisType: '本選考' };
 
@@ -47,7 +49,7 @@ function card(e) {
         ${e.nextDate ? `<span>次：${esc(fmtDate(e.nextDate))}${e.nextTime ? ` ${esc(e.nextTime)}` : ''} ${esc(e.nextPlan)}</span>` : ''}
         ${e.stage === '内定' ? `<span class="${e.offerDecision === '検討中' && daysLeft(e.offerResponseDeadline) !== null && daysLeft(e.offerResponseDeadline) <= 7 ? 'dl soon' : ''}">内定：${esc(e.offerDecision)}${e.offerResponseDeadline ? `・回答 ${esc(deadlineText(e.offerResponseDeadline))}` : ''}</span>` : ''}
       </div>
-      <div class="bar ${pct === 100 && WIN_STAGES.has(e.stage) ? 'done' : ''}"><i style="width:${pct}%"></i></div>
+      <div class="bar ${pct === 100 && WIN_STAGES.has(e.stage) ? 'done' : ''}"><i data-k="entry-${esc(e.id)}" style="width:${pct}%"></i></div>
       ${e.selectionTags?.length ? `<div class="tags">${e.selectionTags.map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       <div class="entry-actions">
         ${actions.join('')}
@@ -67,7 +69,7 @@ function bindCards(root) {
       const e = entry();
       if (!e) return;
       const act = b.dataset.act;
-      if (act === 'next') replaceEntry(moveStage(e, nextStage(e), 'advance'));
+      if (act === 'next') { burst(b, 12); replaceEntry(moveStage(e, nextStage(e), 'advance')); }
       else if (act === 'fail') replaceEntry(moveStage(e, failStage(e), 'fail'));
       else if (act === 'back') replaceEntry(moveStage(e, previousStage(e), 'back'));
       else if (act === 'result') openResult(e);
@@ -221,33 +223,24 @@ function openCredentials(e) {
   });
 }
 
-// ---------- 分析 ----------
-function analyticsBody() {
-  const a = analyze(state.db.entries, ui.analysisType);
-  const rate = (r) => (r === null ? '—' : `${r}%`);
-  const barRow = (label, value, detail, pct) => `<div class="stat"><div class="top"><span>${esc(label)}</span><b>${esc(value)}</b></div><div class="bar"><i style="width:${pct ?? 0}%"></i></div>${detail ? `<div class="faint">${esc(detail)}</div>` : ''}</div>`;
-  return `
-    ${segmented('atype', [{ value: 'インターン', label: 'インターン' }, { value: '本選考', label: '本選考' }], ui.analysisType)}
-    <div class="metrics" style="margin-top:12px">
-      <div><span>登録</span><strong>${a.total}</strong></div><div><span>選考開始</span><strong>${a.started}</strong></div>
-      <div><span>${ui.analysisType === 'インターン' ? '合格' : '内定'}率</span><strong>${rate(a.winRate)}</strong></div>
-    </div>
-    <p class="faint">合格率は結果が出た${a.decided}件のうち${a.wins}件。</p>
-    <div class="eyebrow" style="margin-top:14px">FUNNEL</div><h3 class="h3">選考の進み方（選考開始＝100%）</h3>
-    ${a.funnel.map((f) => barRow(f.label, `${f.count}件`, '', f.rate)).join('')}
-    <div class="eyebrow" style="margin-top:14px">PHASE</div><h3 class="h3">段階ごとの通過率</h3>
-    ${a.phases.map((p) => barRow(p.label, rate(p.rate), p.total ? `結果が出た${p.total}件中${p.passed}件通過` : 'まだ結果が出た選考がありません', p.rate)).join('')}
-    <div class="eyebrow" style="margin-top:14px">INDUSTRY</div><h3 class="h3">業界別の${ui.analysisType === 'インターン' ? '合格' : '内定'}率</h3>
-    ${a.industries.length ? a.industries.map((r) => barRow(r.label, `${r.rate}%`, `${r.total}件中${r.passed}件`, r.rate)).join('') : '<p class="muted">業界と最終結果が入ると出ます。</p>'}`;
-}
+// ---------- 分析（インフォグラフィックは infographic.js） ----------
 function openAnalytics() {
   openSheet({
     title: '選考の分析',
-    bodyHtml: analyticsBody(),
+    bodyHtml: `${segmented('atype', [{ value: 'インターン', label: 'インターン' }, { value: '本選考', label: '本選考' }], ui.analysisType)}
+      <div id="infog">${analyticsHtml(state.db.entries, ui.analysisType)}</div>`,
     submitLabel: '閉じる',
     onSubmit() {},
     onOpen(form) {
-      form.addEventListener('change', (ev) => { if (ev.target.name === 'atype') { ui.analysisType = ev.target.value; openAnalytics(); } });
+      animateInfographic($('#infog', form));
+      form.addEventListener('change', (ev) => {
+        if (ev.target.name !== 'atype') return;
+        ui.analysisType = ev.target.value;
+        // シートは開いたまま中身だけ差し替えて、もう一度描き込む
+        const box = $('#infog', form);
+        box.innerHTML = analyticsHtml(state.db.entries, ui.analysisType);
+        animateInfographic(box);
+      });
     },
   });
 }
@@ -344,7 +337,7 @@ function pipelineView() {
 function offersView() {
   const o = offerSummary(state.db.entries);
   return `
-    <div class="metrics"><div><span>保有内定</span><strong>${o.holding}</strong></div><div><span>承諾</span><strong>${o.accepted}</strong></div><div class="${o.urgent ? 'hot' : ''}"><span>回答期限7日以内</span><strong>${o.urgent}</strong></div></div>
+    <div class="metrics">${metric('保有内定', o.holding, 'of-hold')}${metric('承諾', o.accepted, 'of-acc')}${metric('回答期限7日以内', o.urgent, 'of-urgent', o.urgent ? 'hot' : '')}</div>
     ${o.offers.length ? o.offers.map((e) => `
       <article class="card offer ${e.offerDecision === '承諾' ? 'accepted' : e.offerDecision === '辞退' ? 'declined' : ''}">
         <div class="entry-top"><div class="main"><div class="faint">${esc(e.industry !== '未設定' ? e.industry : '業界未設定')}</div><h3>${esc(e.company)}</h3><div class="muted">${esc(e.offerRole || e.role || '職種・配属未設定')}</div></div>${stagePill(e.offerDecision)}</div>
@@ -354,15 +347,18 @@ function offersView() {
       </article>`).join('') : '<div class="list"><div class="empty">内定はまだありません。本選考を「内定」にすると、ここに出ます。</div></div>'}`;
 }
 
+/** 数字タイル。入場時は0から数え、値が変わったら前の値から数え直す。 */
+const metric = (label, n, k, cls = '') => `<div class="${cls}"><span>${esc(label)}</span><strong data-count="${n}" data-num="${n}" data-k="${k}">${n}</strong></div>`;
+
 function summaryBlock() {
   const entries = state.db.entries;
   const near = upcomingDeadlines(entries);
   const overdue = overdueDeadlines(entries);
   return `
     <div class="metrics">
-      <div><span>進行中</span><strong>${entries.filter(isActive).length}</strong></div>
-      <div class="${near.length ? 'hot' : ''}"><span>締切7日以内</span><strong>${near.length}</strong></div>
-      <div><span>合格・内定</span><strong>${entries.filter((e) => WIN_STAGES.has(e.stage)).length}</strong></div>
+      ${metric('進行中', entries.filter(isActive).length, 'sum-active')}
+      ${metric('締切7日以内', near.length, 'sum-near', near.length ? 'hot' : '')}
+      ${metric('合格・内定', entries.filter((e) => WIN_STAGES.has(e.stage)).length, 'sum-win')}
     </div>
     ${near.length || overdue.length ? `<div class="strip">
       ${near.slice(0, 4).map(({ entry, left }) => `<button class="dl-card ${left <= 1 ? 'critical' : 'soon'}" data-open="${esc(entry.id)}"><b>${esc(entry.company)}</b><span>${esc(entry.stage)}・${esc(deadlineText(entry.deadline))}</span></button>`).join('')}
@@ -382,11 +378,11 @@ export function renderShukatsu(root) {
   $('#addEntry', root).addEventListener('click', () => openEntryForm(null));
   $('#importBtn', root).addEventListener('click', () => { importCandidates = []; openImport('memo'); });
   $('#analyticsBtn', root).addEventListener('click', openAnalytics);
-  $$('[name=view]', root).forEach((r) => r.addEventListener('change', () => { ui.view = r.value; renderShukatsu(root); }));
+  $$('[name=view]', root).forEach((r) => r.addEventListener('change', () => { ui.view = r.value; renderShukatsu(root); playEnter($('#subview', root)); }));
   $$('[data-open]', root).forEach((b) => b.addEventListener('click', () => openEntryForm(b.dataset.open)));
   $$('[data-offer]', root).forEach((b) => b.addEventListener('click', () => openOffer(state.db.entries.find((e) => e.id === b.dataset.offer))));
-  $$('[data-filter]', root).forEach((b) => b.addEventListener('click', () => { ui.filter = b.dataset.filter; renderShukatsu(root); }));
-  $('#sort', root)?.addEventListener('change', (ev) => { ui.sort = ev.target.value; renderShukatsu(root); });
+  $$('[data-filter]', root).forEach((b) => b.addEventListener('click', () => { ui.filter = b.dataset.filter; renderShukatsu(root); playEnter($('#cards', root)); }));
+  $('#sort', root)?.addEventListener('change', (ev) => { ui.sort = ev.target.value; renderShukatsu(root); playEnter($('#cards', root)); });
   // 検索は入力中にフォーカスを失わないよう、カード部分だけ描き直す
   $('#q', root)?.addEventListener('input', (ev) => {
     ui.query = ev.target.value;
