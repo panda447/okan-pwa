@@ -5,7 +5,8 @@
 
 ## 起動
 
-`start.bat` をダブルクリック（ブラウザが `http://127.0.0.1:8766/` を開く）。止めるときは Ctrl+C。
+`start.bat` をダブルクリック（開発用の静的サーバが立ち、`http://127.0.0.1:8766/` が開く）。止めるときは Ctrl+C。
+本番はGitHub Pagesに `public/` を置くだけで、サーバは要らない（下の「公開」）。
 
 ```bash
 python server.py --port 8766
@@ -36,10 +37,27 @@ node tools/verify-port.mjs
 
 ## データ
 
-- 保存先：`data/data.json`（操作の約0.3秒後に自動保存）。1日1回 `data/backups/` に退避（直近20日分）
-- 読み込みに失敗したときは**保存を止める**（空のデータで上書きしないため）
-- サーバは `127.0.0.1` のみで待ち受け。Hostが localhost 系以外のリクエストは拒否
-- 外に出る通信は天気（Open-Meteo）だけ。データ本体は外部に送らない
+- 保存先：**このブラウザの中だけ**（localStorage）。サーバにもクラウドにも送らない。外に出る通信は天気（Open-Meteo）だけ
+- 端末をまたげない（スマホとPCは別データ）。移すときは設定の「JSONを書き出す／読み込む」
+- ブラウザのサイトデータを消すと失われる。ときどき書き出してバックアップを取る
+- 読み込みに失敗したときは保存を止める（壊れたデータを空で上書きしないため）
+
+## 公開（GitHub Pages）
+
+公開URL：https://panda447.github.io/okan-pwa/ （リポジトリ：panda447/okan-pwa、公開リポジトリ）
+
+`gh-pages` ブランチの中身（`public/` と同じ）がそのまま公開される。Settings → Pages の Source は「Deploy from a branch」→ `gh-pages` / `/ (root)`。
+コードを直したあとの更新は、main にコミットしてから次の2行：
+
+```bash
+git subtree split --prefix public -b gh-pages-tmp
+git push -f origin gh-pages-tmp:gh-pages && git branch -D gh-pages-tmp
+```
+
+（GitHub Actionsで自動公開にしたい場合は、`gh auth refresh -h github.com -s workflow` で権限を足してから、Pages Source を「GitHub Actions」にしてワークフローを置く。）
+
+無料プランで使うにはリポジトリを公開（public）にする必要がある。コードは誰でも読めるが、予定などのデータはブラウザ内なのでコードには入らない。
+スマホではそのURLを開き、「ホーム画面に追加」でアプリとして使える（HTTPSなので通知の許可も出せる）。
 
 ## 通知についての制約（okan-app との違い）
 
@@ -51,19 +69,19 @@ node tools/verify-port.mjs
 - 通知はこのページ（またはインストールしたアプリ）を開いている間だけ判定する。20秒ごとに時刻を確認する
 - 予定の60分前の通知は、予約時刻から5分以内に開いていれば出す。それ以降は「○分後」が嘘になるので出さない
 - 届いたものだけを履歴に残す。画面が見えず、OS通知も許可されていない場合は出さない・残さない
-- スマホで使うなら、PCの `http://127.0.0.1:8766/` は届かない（別端末から見えない設計）。スマホで通知まで使いたい場合は okan-app（Expo Go）を使う
+- Pagesに置けばスマホでも開ける。ただし閉じている間の通知は届かない。閉じていても届かせたい場合は okan-app（Expo Go）を使う
 
 ## 構成
 
 ```
-server.py        標準ライブラリのHTTPサーバ + /api/data (GET/PUT)
+server.py        開発用の静的サーバ（保存はしない）
 public/
   index.html / style.css / manifest.webmanifest / sw.js / icon-*.png
   js/            main, store, ui, weather, okan, notify, views/*
   lib/           okan-app から移植した純粋関数（日時・進捗・ルール・通知抑制）
-data/            data.json とバックアップ（実行時に生成）
 tools/           port-from-expo.mjs（移植）/ verify-port.mjs（既存テストで検証）/ make_icons.py
-start.bat        起動用
+start.bat        開発用サーバの起動
+
 ```
 
 ## 参考元から入れなかったもの
