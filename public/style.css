@@ -122,6 +122,13 @@ dialog .head-row { display: flex; justify-content: space-between; align-items: c
 .seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
 .preview { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
 .preview .eyebrow { margin-bottom: 2px; }
+/* 天気の地点（設定）。候補は .chip を流用する */
+.place-current { margin: 0; }
+.place-search { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.place-search .field { flex: 1; margin-bottom: 0; }
+.place-search .btn { flex: none; padding: 9px 16px; }
+.place-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.place-list:empty { display: none; }
 
 /* カレンダー */
 .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 10px 0; }

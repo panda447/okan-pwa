@@ -2,7 +2,7 @@ import { formatDateOnly, formatTimeRange } from '../../lib/datetime.js';
 import { formatProgress, summarizeGoalProgress } from '../../lib/goalProgress.js';
 import { currentSayings } from '../okan.js';
 import { state, todaysSchedules } from '../store.js';
-import { refreshForecast } from '../weather.js';
+import { currentLocation, refreshForecast } from '../weather.js';
 import { esc, header } from '../ui.js';
 import { daysLeft, deadlineText, isActive, upcomingDeadlines } from '../../lib/shukatsu/model.js';
 
@@ -36,7 +36,9 @@ function weatherCard() {
     return `<div class="weather">${cell('今日（最高）', data.today)}${cell('明日（最高）', data.tomorrow)}</div>
       ${data.isStale ? '<p class="warn" style="margin:8px 0 0">最新を取得できず、前回の値を表示しています。</p>' : ''}`;
   })();
-  return `<section class="card"><div class="eyebrow">WEATHER</div><h2>天気</h2>${body}</section>`;
+  // 取れた天気には取得した地点の名前が付いている。取得前は設定の地点を出す
+  const place = data?.locationName ?? currentLocation().name;
+  return `<section class="card"><div class="eyebrow">WEATHER</div><h2>天気</h2><p class="faint" style="margin:0">${esc(place)}</p>${body}</section>`;
 }
 
 function goalMini(goal) {

@@ -3,9 +3,11 @@ import { parseClock } from '../../lib/okan/rules.js';
 import { renderMessage } from '../../lib/okan/templates.js';
 import { okanSettings } from '../okan.js';
 import { permission, plannedStatus, requestPermission, supported } from '../notify.js';
-import { flush, getSaveStatus, replaceAll, saveSettings, state } from '../store.js';
+import { clearWeatherCache, flush, getSaveStatus, replaceAll, saveSettings, state } from '../store.js';
 import { $, esc, header, segmented, toast, confirmDialog } from '../ui.js';
 import { DEADLINE_LEAD_OPTIONS, toShukatsuPrefs } from '../../lib/shukatsu/okanDeadline.js';
+import { DEFAULT_LOCATION, isSameLocation, resolveLocation, searchPlaces } from '../../lib/weather.js';
+import { refreshForecast } from '../weather.js';
 import { decodeSyncCode, encodeSyncCode } from '../syncCode.js';
 
 const LEAD_LABELS = { 0: 'オフ', 1: '前日', 3: '3日前', 7: '7日前' };
@@ -33,6 +35,66 @@ function previewText(tone, level) {
   return renderMessage(PREVIEW_TRIGGER, tone, level);
 }
 
+/** 地名検索は大きな市だと「市」まで要る（「京都」は0件、「京都市」で見つかる）ので、例で伝える。 */
+const NO_PLACE_MESSAGE = '見つかりませんでした。「京都市」「札幌市」のように市区町村名まで入れてみてください。';
+const SEARCH_FAILED_MESSAGE = '地名を検索できませんでした。通信状況を確かめて、もう一度お試しください。';
+
+/**
+ * 天気の地点の、保存前の状態。設定画面は保存や天気の更新のたびに描き直されるので、検索結果を画面の外に持つ。
+ * selected: undefined＝まだ選んでいない（保存済みのまま）／null＝初期値に戻す／地点＝その地点を選んだ。
+ */
+const placeDraft = { query: '', results: null, selected: undefined, message: '', searching: false };
+const resetPlaceDraft = () => Object.assign(placeDraft, { query: '', results: null, selected: undefined, message: '' });
+// 保存せずに設定から離れたら、選びかけの地点は捨てる（他の項目と同じ扱い）
+window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/settings')) resetPlaceDraft(); });
+
+/** 保存するときの地点。選んでいなければ保存済みの値。 */
+const chosenPlace = () => (placeDraft.selected === undefined ? okanSettings().weatherLocation : placeDraft.selected);
+const isPicked = (place, chosen) => chosen != null && place.name === chosen.name && isSameLocation(place, chosen);
+
+/** 地点の欄だけを描き直す（フォームの他の入力を消さないため）。 */
+function paintPlace(root) {
+  const current = $('#placeCurrent', root);
+  if (!current) return; // 検索中に別の画面へ移った
+  const saved = okanSettings().weatherLocation;
+  const chosen = chosenPlace();
+  current.textContent = resolveLocation(chosen).name;
+  $('#placePending', root).hidden = isSameLocation(chosen, saved);
+  $('#placeReset', root).hidden = chosen === null;
+  const btn = $('#placeSearch', root);
+  btn.disabled = placeDraft.searching;
+  btn.textContent = placeDraft.searching ? '探しています…' : '探す';
+  const msg = $('#placeMsg', root);
+  msg.textContent = placeDraft.message;
+  msg.hidden = !placeDraft.message;
+  $('#placeList', root).innerHTML = (placeDraft.results ?? [])
+    .map((p, i) => `<button type="button" class="chip${isPicked(p, chosen) ? ' on' : ''}" aria-pressed="${isPicked(p, chosen)}" data-place="${i}">${esc(p.name)}</button>`)
+    .join('');
+}
+
+async function runPlaceSearch(root) {
+  if (placeDraft.searching) return;
+  if (!placeDraft.query.trim()) {
+    placeDraft.message = '地名を入力してください。';
+    paintPlace(root);
+    return;
+  }
+  placeDraft.searching = true;
+  placeDraft.message = '';
+  paintPlace(root);
+  try {
+    const found = await searchPlaces(placeDraft.query);
+    placeDraft.results = found;
+    placeDraft.message = found.length ? '' : NO_PLACE_MESSAGE;
+  } catch {
+    placeDraft.results = null;
+    placeDraft.message = SEARCH_FAILED_MESSAGE;
+  } finally {
+    placeDraft.searching = false;
+  }
+  paintPlace(root);
+}
+
 export function renderSettings(root) {
   const s = okanSettings();
   const job = toShukatsuPrefs(state.db.settings);
@@ -54,6 +116,16 @@ export function renderSettings(root) {
         <label class="field">起床時刻<input name="wake" inputmode="numeric" value="${esc(s.wakeTime)}" placeholder="07:00"></label>
       </div>
       <p class="faint">この時間帯は、寝る話以外を通知しません。</p>
+      <p class="muted" style="margin:14px 0 2px">天気の地点</p>
+      <p class="place-current"><b id="placeCurrent"></b></p>
+      <p class="faint" id="placePending" hidden>保存すると、この地点の天気に切り替わります。</p>
+      <div class="place-search">
+        <label class="field">地名で探す<input name="placeQuery" id="placeQuery" enterkeyhint="search" autocomplete="off" placeholder="例：新宿、京都市" value="${esc(placeDraft.query)}"></label>
+        <button type="button" class="btn" id="placeSearch">探す</button>
+      </div>
+      <p class="warn" id="placeMsg" role="status" hidden></p>
+      <div class="place-list" id="placeList" aria-label="天気の地点の候補"></div>
+      <button type="button" class="btn small ghost" id="placeReset" hidden>初期値（${esc(DEFAULT_LOCATION.name)}）に戻す</button>
       <p class="muted" style="margin-bottom:6px">通知</p>
       ${segmented('notify', [{ value: 'on', label: 'オン' }, { value: 'off', label: 'オフ' }], s.notificationEnabled ? 'on' : 'off')}
       <p class="warn" id="notifyWarn" ${s.notificationEnabled ? 'hidden' : ''}>オフの間は、おかんが声をかける条件を満たしても通知が届きません。</p>
@@ -103,6 +175,33 @@ export function renderSettings(root) {
   });
   ['sleep', 'wake'].forEach((n) => $(`[name=${n}]`, form).addEventListener('input', (e) => { e.target.value = formatTimeInput(e.target.value); }));
 
+  // 天気の地点：検索は保存（フォーム送信）とは別。Enterでも探せるが、送信はさせない
+  const placeQuery = $('#placeQuery', form);
+  placeQuery.addEventListener('input', () => {
+    placeDraft.query = placeQuery.value;
+    placeDraft.message = '';
+    $('#placeMsg', root).hidden = true;
+  });
+  placeQuery.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return; // 変換確定のEnterは通す
+    e.preventDefault();
+    runPlaceSearch(root);
+  });
+  $('#placeSearch', form).addEventListener('click', () => runPlaceSearch(root));
+  $('#placeList', form).addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-place]');
+    if (!btn) return;
+    placeDraft.selected = placeDraft.results[Number(btn.dataset.place)];
+    $('#savedNote', root).textContent = '';
+    paintPlace(root);
+  });
+  $('#placeReset', form).addEventListener('click', () => {
+    placeDraft.selected = null;
+    $('#savedNote', root).textContent = '';
+    paintPlace(root);
+  });
+  paintPlace(root);
+
   form.addEventListener('submit', (ev) => {
     ev.preventDefault();
     const fd = new FormData(form);
@@ -113,6 +212,10 @@ export function renderSettings(root) {
       return;
     }
     err.hidden = true;
+    const place = chosenPlace();
+    const placeChanged = !isSameLocation(okanSettings().weatherLocation, place);
+    // 保存で設定画面が描き直されるので、選びかけの状態は先に片付ける
+    resetPlaceDraft();
     saveSettings({
       tone: fd.get('tone'),
       interference_level: Number(fd.get('level')),
@@ -121,7 +224,17 @@ export function renderSettings(root) {
       notification_enabled: fd.get('notify') === 'on',
       shukatsu_deadline_days: Number(fd.get('lead')),
       shukatsu_event_notice: fd.get('event') === 'on',
+      // 初期値（近江八幡市）に戻すときは3つとも null
+      weather_location_name: place?.name ?? null,
+      weather_latitude: place?.latitude ?? null,
+      weather_longitude: place?.longitude ?? null,
     });
+    paintPlace(root); // 入力欄にフォーカスがあると描き直しが止まるので、地点の欄だけは確実に直す
+    if (placeChanged) {
+      // 前の地点の天気を「前回の値」として出さないよう消してから、新しい地点で取り直す
+      clearWeatherCache();
+      refreshForecast();
+    }
     // 通知を使う設定にしたら、許可を求める（ユーザー操作の直後だけ表示される）
     if (fd.get('notify') === 'on' && permission() === 'default') requestPermission().then(() => renderSettings(root));
     toast('設定', '保存しました。');
