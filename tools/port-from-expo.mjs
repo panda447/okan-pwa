@@ -11,6 +11,7 @@ const ts = createRequire(join(SRC, 'package.json'))('typescript');
 const files = [
   'lib/datetime.ts',
   'lib/goalProgress.ts',
+  'lib/weather.ts',
   'lib/okan/types.ts',
   'lib/okan/rules.ts',
   'lib/okan/templates.ts',
