@@ -164,6 +164,14 @@ export function upsertWeatherCache(days) {
   state.db.weather_cache = state.db.weather_cache.slice(-14);
   persist();
 }
+/**
+ * 天気キャッシュには地点の列が無いので、地点を変えたら前の地点の分を消す。
+ * 残すと、通信できないときに別の場所の天気を「前回の値」として出してしまう。
+ */
+export function clearWeatherCache() {
+  state.db.weather_cache = [];
+  persist();
+}
 
 // ---------- 就活：選考 ----------
 /**
