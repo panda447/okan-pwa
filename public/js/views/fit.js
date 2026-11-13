@@ -44,14 +44,14 @@ export function renderFit(root) {
   const names = [...new Set(state.db.entries.map((e) => e.company).filter(Boolean))];
   root.innerHTML = `
     <section class="card">
-      <div class="eyebrow">STEP 1</div><h2>自分の傾向</h2>
+      <div class="eyebrow">手順1</div><h2>自分の傾向</h2>
       ${done
         ? `<p class="muted">7つの軸の自己診断は回答済みです。</p><div class="axis-list">${AXES.map((a) => `<div><span>${esc(a.label)}</span><div class="bar"><i style="width:${profile[a.key]}%"></i></div><b>${profile[a.key]}</b></div>`).join('')}</div>
            <button class="btn small" id="quiz">答え直す</button>`
         : `<p class="muted">14問に答えると、主体性・協働性・挑戦志向・論理/慎重性・実行力・適応力・成長/学習の7軸で傾向を出します（${answers.filter(Boolean).length}/14問回答済み）。</p><button class="btn primary" id="quiz">診断をはじめる</button>`}
     </section>
     <section class="card">
-      <div class="eyebrow">STEP 2</div><h2>企業の文章と比べる</h2>
+      <div class="eyebrow">手順2</div><h2>企業の文章と比べる</h2>
       <p class="muted">企業理念・求める人物像・社員インタビューなどを貼り付けます。文章は端末内だけに保存し、どこにも送りません。</p>
       <label class="field">企業名<input id="fitName" list="fitNames" autocomplete="off"><datalist id="fitNames">${names.map((n) => `<option value="${esc(n)}">`).join('')}</datalist></label>
       <label class="field">企業の文章<textarea id="fitText" rows="5" placeholder="私たちは、挑戦を恐れず…"></textarea></label>
@@ -59,7 +59,7 @@ export function renderFit(root) {
       <p class="err" id="fitErr" hidden></p>
       <button class="btn primary" id="fitRun" ${done ? '' : 'disabled'}>比べる</button>${done ? '' : ' <span class="faint">先にSTEP 1に答えてください。</span>'}
     </section>
-    <div class="section"><div><span class="eyebrow">RANKING</span><h2>一致度ランキング</h2></div><span class="muted">${companies.length}社</span></div>
+    <div class="section"><div><h2>一致度ランキング</h2></div><span class="muted">${companies.length}社</span></div>
     <div class="list">${ranking.length ? ranking.map((c) => `
       <div class="row click" data-result="${esc(c.id)}"><span class="time">${c.score === null ? '—' : `${c.score}点`}</span><div class="main"><b>${esc(c.name)}</b><span class="faint">${esc(new Date(c.at).toLocaleDateString('ja-JP'))}・${[...c.text].length}字</span></div><button class="btn small ghost" data-del="${esc(c.id)}" aria-label="${esc(c.name)}を削除">×</button></div>`).join('') : '<div class="empty">まだ比べた企業はありません。</div>'}</div>`;
 

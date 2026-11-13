@@ -6,6 +6,7 @@ import * as I from '../public/lib/shukatsu/importer.js';
 import * as R from '../public/lib/shukatsu/esReview.js';
 import * as F from '../public/lib/shukatsu/fit.js';
 import * as D from '../public/lib/shukatsu/okanDeadline.js';
+import * as Idle from '../public/lib/okanIdle.js';
 import { decryptJson, encryptJson } from '../public/lib/shukatsu/vault.js';
 
 let passed = 0;
@@ -216,6 +217,65 @@ await test('おかん：選考当日と内定の回答期限', () => {
   assert.equal(of.kind, 'offer');
   assert.equal(of.priority, 'HIGH');
   for (const tone of ['kansai', 'standard']) for (let lv = 1; lv <= 5; lv++) assert.ok(D.renderShukatsuMessage(of, tone, lv).includes('D社'));
+});
+await test('次へ進めると締切を外し、戻すと返す（編集・不合格では外さない）', () => {
+  const e = entry({ stage: '書類選考中', deadline: '2026-10-22' });
+  const next = M.moveStage(e, 'ES提出済', 'advance', NOW);
+  assert.equal(next.deadline, '');
+  assert.equal(next.history.at(-1).deadline, '2026-10-22');
+  assert.equal(D.shukatsuTrigger([next], NOW, D.DEFAULT_SHUKATSU_PREFS), null);
+  const back = M.moveStage(next, '書類選考中', 'back', NOW);
+  assert.equal(back.deadline, '2026-10-22');
+  assert.equal(M.moveStage(e, 'Webテスト', 'edit', NOW).deadline, '2026-10-22');
+  assert.equal(M.moveStage(e, 'ES不合格', 'fail', NOW).deadline, '2026-10-22');
+  // 読み込み直しても、履歴に持たせた締切は残る
+  assert.equal(M.normalizeEntry(next, NOW).history.at(-1).deadline, '2026-10-22');
+  // 戻す前に新しい締切を入れていたら、上書きしない
+  assert.equal(M.moveStage({ ...next, deadline: '2026-11-01' }, '書類選考中', 'back', NOW).deadline, '2026-11-01');
+});
+await test('おかん：締切超過は出す前の段階だけ・14日まで', () => {
+  const over = D.shukatsuTrigger([entry({ company: 'E社', stage: '応募予定', deadline: '2026-10-19' })], NOW, D.DEFAULT_SHUKATSU_PREFS);
+  assert.equal(over.kind, 'overdue');
+  assert.equal(over.over, 2);
+  assert.equal(D.renderShukatsuMessage(over, 'kansai', 3), 'E社の締切、2日過ぎてるで。もう出したん？');
+  assert.equal(D.shukatsuTrigger([entry({ stage: 'Webテスト', deadline: '2026-10-19' })], NOW, D.DEFAULT_SHUKATSU_PREFS), null);
+  assert.equal(D.shukatsuTrigger([entry({ stage: '応募予定', deadline: '2026-10-01' })], NOW, D.DEFAULT_SHUKATSU_PREFS), null);
+  assert.equal(D.shukatsuTrigger([entry({ stage: '応募予定', deadline: '2026-10-19' })], NOW, { deadlineLeadDays: 0, eventNotice: true }), null);
+});
+await test('おかん：前日・終わったあと・結果待ち', () => {
+  const eve = D.shukatsuTrigger([entry({ company: 'F社', stage: '一次面接', nextDate: '2026-10-22', nextTime: '13:00', nextPlan: '一次面接' })], NOW, D.DEFAULT_SHUKATSU_PREFS);
+  assert.equal(eve.kind, 'eve');
+  assert.equal(D.renderShukatsuMessage(eve, 'kansai', 3), '明日13:00からF社の一次面接やろ。準備は今日のうちにな。');
+  const today = entry({ company: 'G社', stage: '一次面接', nextDate: '2026-10-21', nextTime: '13:00', nextPlan: '一次面接' });
+  assert.equal(D.shukatsuTrigger([today], new Date(2026, 9, 21, 13, 59), D.DEFAULT_SHUKATSU_PREFS).kind, 'event');
+  const after = D.shukatsuTrigger([today], new Date(2026, 9, 21, 14, 0), D.DEFAULT_SHUKATSU_PREFS);
+  assert.equal(after.kind, 'after');
+  assert.equal(after.priority, 'LOW');
+  // 時刻が無い予定は、いつ終わったか分からないので当日の声かけのまま
+  assert.equal(D.shukatsuTrigger([entry({ stage: '一次面接', nextDate: '2026-10-21' })], new Date(2026, 9, 21, 23, 0), D.DEFAULT_SHUKATSU_PREFS).kind, 'event');
+  const waitFrom = (iso) => ({ ...entry({ company: 'H社', stage: '結果待ち' }), history: [{ from: '最終面接', to: '結果待ち', action: 'advance', at: iso }] });
+  assert.equal(M.waitingDays(waitFrom(new Date(2026, 9, 11, 22, 0).toISOString()), NOW), 10);
+  assert.equal(D.shukatsuTrigger([waitFrom(new Date(2026, 9, 11, 22, 0).toISOString())], NOW, D.DEFAULT_SHUKATSU_PREFS).kind, 'waiting');
+  assert.equal(D.shukatsuTrigger([waitFrom(new Date(2026, 9, 12, 1, 0).toISOString())], NOW, D.DEFAULT_SHUKATSU_PREFS), null);
+  assert.equal(M.waitingDays(entry({ stage: '結果待ち' }), NOW), null);
+  // 急ぎの締切があれば、前日の声かけより先
+  const both = D.shukatsuTrigger([entry({ company: 'F社', stage: '一次面接', nextDate: '2026-10-22' }), entry({ company: 'B社', deadline: '2026-10-23' })], NOW, D.DEFAULT_SHUKATSU_PREFS);
+  assert.equal(both.kind, 'deadline');
+  for (const kind of ['overdue', 'eve', 'after', 'waiting']) for (const tone of ['kansai', 'standard']) for (let lv = 1; lv <= 5; lv++) {
+    const text = D.renderShukatsuMessage({ kind, company: 'Z社', plan: '面接', time: '10:00', over: 3, waited: 12 }, tone, lv);
+    assert.ok(text.includes('Z社') && !text.includes('undefined'), `${kind}/${tone}/${lv}: ${text}`);
+  }
+});
+await test('用件が無いときのひとこと：同じ時間帯なら同じ文・おせっかい度1は世間話なし', () => {
+  const ctx = (h, extra = {}) => ({ now: new Date(2026, 9, 21, h, 0), today: null, schedulesLeft: 2, ...extra });
+  assert.equal(Idle.renderIdle('kansai', 3, ctx(8)), Idle.renderIdle('kansai', 3, { ...ctx(8), now: new Date(2026, 9, 21, 8, 40) }));
+  assert.equal(Idle.renderIdle('kansai', 1, ctx(8)), '今お伝えする用件はありません。');
+  assert.match(Idle.renderIdle('kansai', 3, ctx(8, { today: { rainProbability: 80, temperature: 20 } })), /傘/);
+  assert.match(Idle.renderIdle('standard', 3, ctx(9, { today: { rainProbability: 0, temperature: 6 } })), /6℃/);
+  // 夜は今日の天気の話をしない
+  assert.doesNotMatch(Idle.renderIdle('kansai', 3, ctx(23, { today: { rainProbability: 90, temperature: 5 } })), /傘|℃/);
+  assert.equal(Idle.dayPart(new Date(2026, 9, 21, 1, 0)), 'night');
+  for (const tone of ['kansai', 'standard', 'unknown']) for (let h = 0; h < 24; h++) assert.ok(Idle.renderIdle(tone, 3, ctx(h)).length > 4);
 });
 await test('設定の読み替え（不正値は既定）', () => {
   assert.deepEqual(D.toShukatsuPrefs(null), D.DEFAULT_SHUKATSU_PREFS);

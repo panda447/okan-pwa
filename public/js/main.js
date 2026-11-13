@@ -2,6 +2,7 @@ import { loadStore, state, subscribe } from './store.js';
 import { refreshForecast } from './weather.js';
 import { startNotifier } from './notify.js';
 import { esc } from './ui.js';
+import { applyTheme } from './theme.js';
 import { countUp, installRipple, morph, moveTabIndicator, playEnter } from './motion.js';
 import { renderHome } from './views/home.js';
 import { renderSchedules } from './views/schedules.js';
@@ -26,7 +27,7 @@ const currentTab = () => {
 
 function render() {
   if (state.loadError) {
-    app.innerHTML = `<section class="card"><div class="eyebrow">ERROR</div><h2>データを読み込めませんでした</h2>
+    app.innerHTML = `<section class="card"><h2>データを読み込めませんでした</h2>
       <p class="err">${esc(state.loadError)}</p><p class="muted">ブラウザの保存領域を読めませんでした。保存は止めてあります（壊れたデータを空で上書きしないため）。</p></section>`;
     return;
   }
@@ -34,6 +35,7 @@ function render() {
     app.innerHTML = '<p class="muted">読み込み中…</p>';
     return;
   }
+  applyTheme();
   const tab = currentTab();
   document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (TAB_OF[tab] ?? tab)));
   moveTabIndicator(tabbar);

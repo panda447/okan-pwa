@@ -1,5 +1,6 @@
-import { formatDateInput, formatDateOnly, parseDateOnly } from '../../lib/datetime.js';
-import { formatProgress, summarizeGoalProgress } from '../../lib/goalProgress.js';
+import { formatDateOnly, parseDateOnly } from '../../lib/datetime.js';
+import { summarizeGoalProgress } from '../../lib/goalProgress.js';
+import { progressView } from './parts.js';
 import { addGoal, addGoalLog, deleteGoal, deleteGoalLog, state, updateGoal } from '../store.js';
 import { $, $$, closeSheet, confirmDialog, esc, header, listOrEmpty, openSheet } from '../ui.js';
 import { startOfWeek } from '../../lib/datetime.js';
@@ -19,19 +20,16 @@ export function openGoalForm(id) {
     submitLabel: g ? '保存する' : '追加する',
     bodyHtml: `
       <label class="field">タイトル<input name="title" value="${esc(g?.title ?? '')}" placeholder="週3回筋トレ、ITパスポート など" autocomplete="off"></label>
-      <label class="field">期限（任意）<input name="deadline" inputmode="numeric" value="${esc(g?.deadline ?? '')}" placeholder="2026-12-31"></label>
+      <label class="field">期限（任意）<input name="deadline" type="date" value="${esc(g?.deadline ?? '')}" placeholder="2026-12-31"></label>
       <div class="two">
         <label class="field">1日の回数（任意）<input name="daily" inputmode="numeric" value="${esc(g?.daily_target ?? '')}" placeholder="1"></label>
         <label class="field">1週間の回数（任意）<input name="weekly" inputmode="numeric" value="${esc(g?.weekly_target ?? '')}" placeholder="3"></label>
       </div>
       <p class="faint">回数を入れると進捗バーが出ます。空欄なら記録回数だけ数えます。</p>
       <label class="field">メモ（任意）<textarea name="description" rows="2" placeholder="なぜやるか、どうやるか など">${esc(g?.description ?? '')}</textarea></label>`,
-    onOpen(form) {
-      $('[name=deadline]', form).addEventListener('input', (e) => { e.target.value = formatDateInput(e.target.value); });
-    },
     onSubmit(v) {
       if (!v.title.trim()) return 'タイトルを入力してください。';
-      if (v.deadline.trim() && !parseDateOnly(v.deadline)) return '期限は YYYY-MM-DD の形式で入力してください。';
+      if (v.deadline.trim() && !parseDateOnly(v.deadline)) return '期限の日付を確かめてください。';
       const daily = parseTarget(v.daily);
       const weekly = parseTarget(v.weekly);
       if (daily === 'invalid' || weekly === 'invalid') return '目標回数は1以上の整数で入力してください。';
@@ -50,9 +48,8 @@ export function openGoalForm(id) {
 
 function goalCard(goal) {
   const progress = summarizeGoalProgress(goal, state.db.goal_logs);
-  const bars = progress.map((p, i) => `
-    <div class="progress"><div class="top"><span>${esc(formatProgress(p))}</span>${p.ratio !== null ? `<span><span data-num="${Math.round(p.ratio * 100)}" data-k="goal-${esc(goal.id)}-${i}">${Math.round(p.ratio * 100)}</span>%</span>` : ''}</div>
-    ${p.ratio === null ? '' : `<div class="bar ${p.ratio >= 1 ? 'done' : ''}"><i data-k="goal-${esc(goal.id)}-${i}" style="width:${Math.round(p.ratio * 100)}%"></i></div>`}</div>`).join('');
+  const bars = progress.map((p, i) => progressView(p, `goal-${goal.id}-${i}`)).join('');
+  const allDone = progress.every((p) => p.ratio !== null && p.ratio >= 1);
   // 取り消しは「今週いちばん新しい記録」を1件消す
   const latest = state.db.goal_logs
     .filter((l) => l.goal_id === goal.id && new Date(l.logged_at) >= startOfWeek())
@@ -62,13 +59,13 @@ function goalCard(goal) {
     ${goal.deadline ? `<div class="faint">期限 ${esc(formatDateOnly(goal.deadline))}</div>` : ''}
     ${goal.description ? `<div class="muted">${esc(goal.description)}</div>` : ''}
     ${bars}
-    <div class="goal-actions"><button class="btn primary" data-done="${esc(goal.id)}" aria-label="${esc(goal.title)}をやった">やった</button>
-    ${latest ? `<button class="btn" data-undo="${esc(latest.id)}">取り消し</button>` : ''}</div></section>`;
+    <div class="goal-actions"><button class="btn ${allDone ? '' : 'primary'}" data-done="${esc(goal.id)}" aria-label="${esc(goal.title)}をやった">${allDone ? 'もう1回やった' : 'やった'}</button>
+    ${latest ? `<button class="btn ghost" data-undo="${esc(latest.id)}">1回分を取り消す</button>` : ''}</div></section>`;
 }
 
 export function renderGoals(root) {
   root.innerHTML = `
-    ${header({ eyebrow: 'GOAL', title: '目標', sub: `${state.db.goals.length}件`, actions: '<button class="btn primary icon-btn" id="addGoal" aria-label="目標を追加">＋</button>' })}
+    ${header({ title: '目標', sub: `${state.db.goals.length}件`, actions: '<button class="btn primary icon-btn" id="addGoal" aria-label="目標を追加">＋</button>' })}
     ${state.db.goals.length ? state.db.goals.map(goalCard).join('') : listOrEmpty('', ['まだ目標がありません。', '右上の＋から追加してください。'])}`;
   $('#addGoal', root).addEventListener('click', () => openGoalForm(null));
   $$('[data-edit]', root).forEach((b) => b.addEventListener('click', () => openGoalForm(b.dataset.edit)));

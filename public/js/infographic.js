@@ -37,7 +37,7 @@ function nowBar(scoped) {
   if (!scoped.length) return '';
   const cols = PIPELINE_COLUMNS.map((c) => ({ ...c, n: scoped.filter((e) => pipelineColumn(e) === c.key).length })).filter((c) => c.n);
   return `
-    <div class="ig-title"><span class="eyebrow">NOW</span><h3 class="h3">選考の現在地</h3></div>
+    <div class="ig-title"><h3 class="h3">選考の現在地</h3></div>
     <div class="ig-stack" role="img" aria-label="${cols.map((c) => `${c.label}${c.n}件`).join('、')}">
       ${cols.map((c, i) => `<i class="seg-${SEG_CLASS[c.key]}" style="width:${pct(c.n, scoped.length)}%;--d:${i}" title="${esc(c.label)} ${c.n}件"></i>`).join('')}
     </div>
@@ -46,13 +46,13 @@ function nowBar(scoped) {
 
 /** じょうご。段の幅＝選考開始に対する割合、段の間に「前の段からの通過率」。 */
 function funnel(a) {
-  if (!a.started) return `<div class="ig-title"><span class="eyebrow">FUNNEL</span><h3 class="h3">選考の進み方</h3></div><p class="muted">選考を始めると（ESを出すなど段階を進めると）出ます。</p>`;
+  if (!a.started) return `<div class="ig-title"><h3 class="h3">選考の進み方</h3></div><p class="muted">選考を始めると（ESを出すなど段階を進めると）出ます。</p>`;
   // 誰も受けていない段（GDの無い選考ばかり等）は0件の段に見えて「全員落ちた」と読めるので出さない。
   // funnel[1..PHASES.length] が phases[0..] に対応する
   const rows = a.funnel.filter((f, i) => i === 0 || i === a.funnel.length - 1 || a.phases[i - 1].total > 0 || f.count > 0);
   const width = (f) => Math.max(f.rate, 6); // 0件の段も形が見えるように最小幅
   return `
-    <div class="ig-title"><span class="eyebrow">FUNNEL</span><h3 class="h3">選考の進み方（選考開始＝100%）</h3></div>
+    <div class="ig-title"><h3 class="h3">選考の進み方（選考開始＝100%）</h3></div>
     <div class="ig-funnel">
       ${rows.map((f, i) => {
         const next = rows[i + 1];
@@ -73,7 +73,7 @@ function funnel(a) {
 function gauges(a) {
   const arc = 'M 10 60 A 50 50 0 0 1 110 60';
   return `
-    <div class="ig-title"><span class="eyebrow">PHASE</span><h3 class="h3">段階ごとの通過率</h3></div>
+    <div class="ig-title"><h3 class="h3">段階ごとの通過率</h3></div>
     <div class="ig-gauges">
       ${a.phases.map((p, i) => `
         <div class="ig-gauge ${p.rate === null ? 'none' : ''}" style="--d:${i}">
@@ -94,12 +94,12 @@ function bottleneck(a) {
   const judged = a.phases.filter((p) => p.total >= 2);
   if (!judged.length) return '<p class="faint">結果が2件以上そろった段階から、つまずきやすい所を出します。</p>';
   const worst = [...judged].sort((x, y) => x.rate - y.rate || y.total - x.total)[0];
-  return `<div class="ig-callout"><span class="eyebrow">BOTTLENECK</span><p>いちばん落ちているのは <b>${esc(worst.label)}</b>（通過率${worst.rate}%・${worst.total}件中${worst.passed}件）。対策はここから。</p></div>`;
+  return `<div class="ig-callout"><span class="eyebrow">いちばんの壁</span><p>いちばん落ちているのは <b>${esc(worst.label)}</b>（通過率${worst.rate}%・${worst.total}件中${worst.passed}件）。対策はここから。</p></div>`;
 }
 
 /** 業界別。棒に加えて、結果1件＝1つの点で並べる（塗り＝合格）。 */
 function industries(a, winLabel) {
-  const head = `<div class="ig-title"><span class="eyebrow">INDUSTRY</span><h3 class="h3">業界別の${winLabel}率</h3></div>`;
+  const head = `<div class="ig-title"><h3 class="h3">業界別の${winLabel}率</h3></div>`;
   if (!a.industries.length) return `${head}<p class="muted">業界と最終結果が入ると出ます。</p>`;
   const MAX_DOTS = 24;
   return `${head}<div class="ig-ind">${a.industries.map((r, i) => `

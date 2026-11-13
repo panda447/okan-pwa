@@ -1,4 +1,3 @@
-import { formatTimeInput } from '../../lib/datetime.js';
 import { parseClock } from '../../lib/okan/rules.js';
 import { renderMessage } from '../../lib/okan/templates.js';
 import { okanSettings } from '../okan.js';
@@ -9,6 +8,7 @@ import { DEADLINE_LEAD_OPTIONS, toShukatsuPrefs } from '../../lib/shukatsu/okanD
 import { DEFAULT_LOCATION, isSameLocation, resolveLocation, searchPlaces } from '../../lib/weather.js';
 import { refreshForecast } from '../weather.js';
 import { decodeSyncCode, encodeSyncCode } from '../syncCode.js';
+import { THEME_OPTIONS, applyTheme, themePref } from '../theme.js';
 
 const LEAD_LABELS = { 0: 'オフ', 1: '前日', 3: '3日前', 7: '7日前' };
 const DATA_KEYS = ['schedules', 'goals', 'goal_logs', 'interventions'];
@@ -36,7 +36,7 @@ function previewText(tone, level) {
 }
 
 /** 地名検索は大きな市だと「市」まで要る（「京都」は0件、「京都市」で見つかる）ので、例で伝える。 */
-const NO_PLACE_MESSAGE = '見つかりませんでした。「京都市」「札幌市」のように市区町村名まで入れてみてください。';
+const NO_PLACE_MESSAGE = '見つかりませんでした。市区町村の名前で探してみてください（例：近江八幡市）。';
 const SEARCH_FAILED_MESSAGE = '地名を検索できませんでした。通信状況を確かめて、もう一度お試しください。';
 
 /**
@@ -83,7 +83,15 @@ async function runPlaceSearch(root) {
   placeDraft.message = '';
   paintPlace(root);
   try {
-    const found = await searchPlaces(placeDraft.query);
+    // 大きな市は「京都」だと0件で「京都市」なら出る。見つからなければ「市」「区」「町」を足して探し直す
+    const q = placeDraft.query.trim();
+    let found = await searchPlaces(q);
+    if (!found.length && !/[都道府県市区町村]$/.test(q)) {
+      for (const suffix of ['市', '区', '町']) {
+        found = await searchPlaces(q + suffix);
+        if (found.length) break;
+      }
+    }
     placeDraft.results = found;
     placeDraft.message = found.length ? '' : NO_PLACE_MESSAGE;
   } catch {
@@ -102,9 +110,9 @@ export function renderSettings(root) {
   const next = status.nextDate ? status.nextDate.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'なし';
   const save = getSaveStatus();
   root.innerHTML = `
-    ${header({ eyebrow: 'MORE', title: '設定', sub: 'おかんの話し方と通知' })}
+    ${header({ title: '設定', sub: 'おかんの話し方と通知' })}
     <form class="card" id="okanForm" novalidate>
-      <div class="eyebrow">OKAN</div><h2>おかんの設定</h2>
+      <h2>おかんの設定</h2>
       <p class="muted" style="margin-bottom:6px">おせっかい度</p>
       ${segmented('level', [1, 2, 3, 4, 5].map((n) => ({ value: n, label: n })), s.interferenceLevel)}
       <p class="faint" id="levelHint">${esc(LEVEL_DESCRIPTIONS[s.interferenceLevel])}</p>
@@ -112,34 +120,36 @@ export function renderSettings(root) {
       ${segmented('tone', [{ value: 'standard', label: '標準' }, { value: 'kansai', label: '関西' }], s.tone)}
       <div class="preview"><div class="eyebrow">こんな言い方になります</div><div id="previewText">${esc(previewText(s.tone, s.interferenceLevel))}</div></div>
       <div class="two">
-        <label class="field">就寝時刻<input name="sleep" inputmode="numeric" value="${esc(s.sleepTime)}" placeholder="23:00"></label>
-        <label class="field">起床時刻<input name="wake" inputmode="numeric" value="${esc(s.wakeTime)}" placeholder="07:00"></label>
+        <label class="field">就寝時刻<input name="sleep" type="time" value="${esc(s.sleepTime)}" placeholder="23:00"></label>
+        <label class="field">起床時刻<input name="wake" type="time" value="${esc(s.wakeTime)}" placeholder="07:00"></label>
       </div>
       <p class="faint">この時間帯は、寝る話以外を通知しません。</p>
       <p class="muted" style="margin:14px 0 2px">天気の地点</p>
       <p class="place-current"><b id="placeCurrent"></b></p>
       <p class="faint" id="placePending" hidden>保存すると、この地点の天気に切り替わります。</p>
       <div class="place-search">
-        <label class="field">地名で探す<input name="placeQuery" id="placeQuery" enterkeyhint="search" autocomplete="off" placeholder="例：新宿、京都市" value="${esc(placeDraft.query)}"></label>
+        <label class="field">地名で探す<input name="placeQuery" id="placeQuery" enterkeyhint="search" autocomplete="off" placeholder="例：京都、新宿" value="${esc(placeDraft.query)}"></label>
         <button type="button" class="btn" id="placeSearch">探す</button>
       </div>
       <p class="warn" id="placeMsg" role="status" hidden></p>
       <div class="place-list" id="placeList" aria-label="天気の地点の候補"></div>
       <button type="button" class="btn small ghost" id="placeReset" hidden>初期値（${esc(DEFAULT_LOCATION.name)}）に戻す</button>
-      <p class="muted" style="margin-bottom:6px">通知</p>
+      <p class="muted" style="margin:14px 0 6px">画面の色</p>
+      ${segmented('theme', THEME_OPTIONS, themePref())}
+      <p class="muted" style="margin:14px 0 6px">通知</p>
       ${segmented('notify', [{ value: 'on', label: 'オン' }, { value: 'off', label: 'オフ' }], s.notificationEnabled ? 'on' : 'off')}
       <p class="warn" id="notifyWarn" ${s.notificationEnabled ? 'hidden' : ''}>オフの間は、おかんが声をかける条件を満たしても通知が届きません。</p>
       <p class="muted" style="margin:14px 0 6px">就活の締切を言い始める時期</p>
       ${segmented('lead', DEADLINE_LEAD_OPTIONS.map((n) => ({ value: n, label: LEAD_LABELS[n] })), job.deadlineLeadDays)}
-      <p class="muted" style="margin:12px 0 6px">選考・説明会の当日に声をかける</p>
+      <p class="muted" style="margin:12px 0 6px">選考の前日・当日・終わったあとに声をかける</p>
       ${segmented('event', [{ value: 'on', label: 'オン' }, { value: 'off', label: 'オフ' }], job.eventNotice ? 'on' : 'off')}
-      <p class="faint">締切が今日・明日のとき、内定の回答期限が3日以内のときは、おせっかい度1でも声をかけます。</p>
+      <p class="faint">オンのときは、結果待ちが10日を超えた選考も一度気にかけます。締切を過ぎて「次へ」を押していない選考は、14日間は声をかけ続けます。</p>
       <p class="err" id="settingsError" role="alert" hidden></p>
       <div class="form-actions"><span id="savedNote" class="muted"></span><span class="grow"></span><button type="submit" class="btn primary">保存する</button></div>
     </form>
 
     <section class="card">
-      <div class="eyebrow">NOTIFY</div><h2>通知の状態</h2>
+      <h2>通知の状態</h2>
       <p>ブラウザの通知：<b>${esc(PERMISSION_LABELS[permission()] ?? permission())}</b></p>
       ${supported && permission() === 'default' ? '<button class="btn small" id="askPerm">通知を許可する</button>' : ''}
       <p>予約中：<b>${status.count}件</b>（次の予定通知：${esc(next)}）</p>
@@ -147,7 +157,7 @@ export function renderSettings(root) {
     </section>
 
     <section class="card">
-      <div class="eyebrow">DATA</div><h2>データ</h2>
+      <h2>データ</h2>
       <p class="muted">予定 ${state.db.schedules.length}件 / 目標 ${state.db.goals.length}件 / 選考 ${state.db.entries.length}件 / ES ${state.db.es_items.length}件 / 履歴 ${state.db.interventions.length}件。このブラウザの中だけに保存されます（${esc(save.text || '—')}）。ブラウザのデータを消すと失われるので、ときどき「JSONを書き出す」でバックアップを取ってください。</p>
       <div class="goal-actions"><button class="btn" id="exportBtn">JSONを書き出す</button><button class="btn" id="importBtn">JSONを読み込む（置き換え）</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
       <p class="muted" style="margin-top:14px">スマホとPCでデータを移すときは「同期コード」が手軽です（コピーして、もう一方の端末で貼り付ける）。マイページのログイン情報は暗号化されたまま入ります。</p>
@@ -155,7 +165,7 @@ export function renderSettings(root) {
     </section>
 
     <section class="card">
-      <div class="eyebrow">LOG</div><h2>おかんの記録</h2>
+      <h2>おかんの記録</h2>
       <p class="muted">おかんが声をかけた履歴（${state.db.interventions.length}件）。</p>
       <a class="btn" href="#/log">記録を見る ›</a>
     </section>`;
@@ -172,8 +182,9 @@ export function renderSettings(root) {
     $('#previewText', root).textContent = previewText(tone, level);
     $('#notifyWarn', root).hidden = new FormData(form).get('notify') === 'on';
     $('#savedNote', root).textContent = '';
+    // 色は保存を待たずにその場で見せる（保存しなければ、画面を離れたときに元へ戻る）
+    applyTheme(new FormData(form).get('theme'));
   });
-  ['sleep', 'wake'].forEach((n) => $(`[name=${n}]`, form).addEventListener('input', (e) => { e.target.value = formatTimeInput(e.target.value); }));
 
   // 天気の地点：検索は保存（フォーム送信）とは別。Enterでも探せるが、送信はさせない
   const placeQuery = $('#placeQuery', form);
@@ -207,7 +218,7 @@ export function renderSettings(root) {
     const fd = new FormData(form);
     const err = $('#settingsError', root);
     if (parseClock(String(fd.get('sleep'))) === null || parseClock(String(fd.get('wake'))) === null) {
-      err.textContent = '時刻は HH:MM の形式で入力してください。';
+      err.textContent = '就寝時刻と起床時刻を入れてください。';
       err.hidden = false;
       return;
     }
@@ -222,6 +233,7 @@ export function renderSettings(root) {
       sleep_time: String(fd.get('sleep')),
       wake_time: String(fd.get('wake')),
       notification_enabled: fd.get('notify') === 'on',
+      theme: fd.get('theme'),
       shukatsu_deadline_days: Number(fd.get('lead')),
       shukatsu_event_notice: fd.get('event') === 'on',
       // 初期値（近江八幡市）に戻すときは3つとも null

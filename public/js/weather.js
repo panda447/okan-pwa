@@ -17,7 +17,8 @@ async function fetchForecast(location) {
     timezone: location.timezone,
     forecast_days: '2',
   });
-  const res = await fetch('https://api.open-meteo.com/v1/forecast?' + params);
+  // 返事が来ないまま「見てきています…」で止まらないよう、12秒で切り上げる（控えがあればそれを出す）
+  const res = await fetch('https://api.open-meteo.com/v1/forecast?' + params, { signal: AbortSignal.timeout(12_000) });
   if (!res.ok) throw new Error('Open-Meteo responded with ' + res.status);
   const body = await res.json();
   const days = (body.daily?.time ?? []).map((date, i) => ({

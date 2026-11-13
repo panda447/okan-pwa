@@ -1,5 +1,5 @@
 // 選考の追加・編集フォーム。選考タブとカレンダー（予定タブ）の両方から開く。
-import { formatDateInput, formatTimeInput, toHalfWidth } from '../../lib/datetime.js';
+import { toHalfWidth } from '../../lib/datetime.js';
 import {
   ENTRY_TYPES, INDUSTRIES, INTERN_SEASONS, SELECTION_TAGS, activeSequence, defaultFlowFor, flowSummary, isDateKey,
   moveStage, normalizeEntry, seedHistory, stageOptions, standardFlowSteps,
@@ -34,13 +34,13 @@ function body(e) {
 
     <label class="field">いまの段階<select name="stage" id="stageSelect"></select></label>
     <div class="two">
-      <label class="field">締切（任意）<input name="deadline" inputmode="numeric" value="${esc(e.deadline)}" placeholder="2026-11-05"></label>
+      <label class="field">締切（任意）<input name="deadline" type="date" value="${esc(e.deadline)}" placeholder="2026-11-05"></label>
       <label class="field">マイページURL（任意）<input name="portalUrl" type="url" value="${esc(e.portalUrl)}" placeholder="https://"></label>
     </div>
     <fieldset class="box"><legend>次の予定</legend>
       <div class="two">
-        <label class="field">日付<input name="nextDate" inputmode="numeric" value="${esc(e.nextDate)}" placeholder="2026-11-10"></label>
-        <label class="field">時刻（任意）<input name="nextTime" inputmode="numeric" value="${esc(e.nextTime)}" placeholder="13:00"></label>
+        <label class="field">日付<input name="nextDate" type="date" value="${esc(e.nextDate)}" placeholder="2026-11-10"></label>
+        <label class="field">時刻（任意）<input name="nextTime" type="time" value="${esc(e.nextTime)}" placeholder="13:00"></label>
       </div>
       <label class="field">内容<input name="nextPlan" value="${esc(e.nextPlan)}" placeholder="一次面接（Zoom）"></label>
       <p class="faint" style="margin:0">時刻まで入れると予定タブにも入り、おかんが60分前に声をかけます。</p>
@@ -48,8 +48,8 @@ function body(e) {
     <fieldset class="box" data-show="intern"><legend>インターンの参加日</legend>
       ${segmented('internMode', [{ value: 'single', label: '1日' }, { value: 'range', label: '期間' }, { value: 'custom', label: '飛び飛び' }], e.internMode)}
       <div class="two" style="margin-top:10px">
-        <label class="field" data-mode="single range">開始日<input name="internStart" inputmode="numeric" value="${esc(e.internStart)}" placeholder="2026-12-09"></label>
-        <label class="field" data-mode="range">終了日<input name="internEnd" inputmode="numeric" value="${esc(e.internEnd)}" placeholder="2026-12-10"></label>
+        <label class="field" data-mode="single range">開始日<input name="internStart" type="date" value="${esc(e.internStart)}" placeholder="2026-12-09"></label>
+        <label class="field" data-mode="range">終了日<input name="internEnd" type="date" value="${esc(e.internEnd)}" placeholder="2026-12-10"></label>
       </div>
       <label class="field" data-mode="custom">参加日（1行に1日）<textarea name="internDates" rows="3" placeholder="2026-12-09&#10;2026-12-16">${esc(e.internDates.join('\n'))}</textarea></label>
     </fieldset>
@@ -82,9 +82,9 @@ function refresh(form, stage) {
 function validate(v, form) {
   if (!String(v.company || '').trim()) return '企業名を入力してください。';
   for (const [name, label] of [['deadline', '締切'], ['nextDate', '次の予定の日付'], ['internStart', '開始日'], ['internEnd', '終了日']]) {
-    if (v[name] && !isDateKey(v[name])) return `${label}は YYYY-MM-DD の形式で入力してください。`;
+    if (v[name] && !isDateKey(v[name])) return `${label}の日付を確かめてください。`;
   }
-  if (v.nextTime && !/^\d{2}:\d{2}$/.test(v.nextTime)) return '時刻は HH:MM の形式で入力してください。';
+  if (v.nextTime && !/^\d{2}:\d{2}$/.test(v.nextTime)) return '時刻を確かめてください。';
   if (v.nextTime && !v.nextDate) return '時刻を入れるときは、日付も入れてください。';
   if (v.portalUrl && !/^https?:\/\//i.test(v.portalUrl)) return 'マイページURLは https:// から入力してください。';
   const bad = v.internDates.find((d) => !isDateKey(d));
@@ -112,9 +112,6 @@ export function openEntryForm(id = null, preset = {}) {
         }
         if (ev.target.name !== 'stage') refresh(form);
       });
-      const mask = (name, fn) => $(`[name=${name}]`, form).addEventListener('input', (ev) => { ev.target.value = fn(ev.target.value); });
-      ['deadline', 'nextDate', 'internStart', 'internEnd'].forEach((n) => mask(n, formatDateInput));
-      mask('nextTime', formatTimeInput);
     },
     onSubmit(raw) {
       const form = document.getElementById('sheetForm');

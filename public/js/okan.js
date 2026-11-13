@@ -2,7 +2,7 @@
 import { summarizeGoalProgress } from '../lib/goalProgress.js';
 import { clampLevel, decideOkanMessage } from '../lib/okan/engine.js';
 import { renderShukatsuMessage, shukatsuTrigger, toShukatsuPrefs } from '../lib/shukatsu/okanDeadline.js';
-import { renderIdleMessage } from '../lib/okan/templates.js';
+import { renderIdle } from '../lib/okanIdle.js';
 import { toOkanSettingsInput } from '../lib/okan/types.js';
 import { state, todaysSchedules } from './store.js';
 
@@ -43,5 +43,15 @@ export function currentDecision(now = new Date()) {
 
 export function currentSayings(now = new Date()) {
   const { context, message } = currentDecision(now);
-  return message ? message.text : renderIdleMessage(context.settings.tone);
+  if (message) return message.text;
+  return renderIdle(context.settings.tone, clampLevel(context.settings.interferenceLevel), {
+    now,
+    today: state.forecast.data?.today ?? null,
+    schedulesLeft: context.todaysSchedules.filter((s) => new Date(s.start_at) > now).length,
+  });
+}
+
+/** いまのひとことが何の用件か（ホームの見出し用）。用件なしは null。 */
+export function currentTopic(now = new Date()) {
+  return currentDecision(now).message?.trigger ?? null;
 }
