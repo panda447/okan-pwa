@@ -1,7 +1,7 @@
 /* おかんアプリのService Worker。
  * 役割は2つだけ：①画面を端末に控える（オフラインでも開ける） ②通知を表示する。
  */
-const CACHE = 'okan-pwa-v6';
+const CACHE = 'okan-pwa-v7';
 /** 文字（Google Fonts）の控え。画面の控えを作り直しても消さない */
 const FONT_CACHE = 'okan-pwa-fonts-v1';
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
@@ -17,7 +17,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -42,9 +42,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (url.origin !== location.origin) return;
-  // 画面ファイルはネットワーク優先（更新がすぐ反映される）、繋がらなければ控えを使う
+  // 画面ファイルはネットワーク優先（更新がすぐ反映される）、繋がらなければ控えを使う。
+  // ブラウザの一時保存（GitHub Pagesは10分）を素通りさせず、毎回サーバーに変更の有無を確かめる
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();
