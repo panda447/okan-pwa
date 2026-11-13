@@ -1,7 +1,7 @@
 /* おかんアプリのService Worker。
  * 役割は2つだけ：①画面を端末に控える（オフラインでも開ける） ②通知を表示する。
  */
-const CACHE = 'okan-pwa-v5';
+const CACHE = 'okan-pwa-v6';
 /** 文字（Google Fonts）の控え。画面の控えを作り直しても消さない */
 const FONT_CACHE = 'okan-pwa-fonts-v1';
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];

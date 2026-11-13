@@ -86,8 +86,9 @@ async function runPlaceSearch(root) {
     // 大きな市は「京都」だと0件で「京都市」なら出る。見つからなければ「市」「区」「町」を足して探し直す
     const q = placeDraft.query.trim();
     let found = await searchPlaces(q);
-    if (!found.length && !/[都道府県市区町村]$/.test(q)) {
-      for (const suffix of ['市', '区', '町']) {
+    // 末尾の字では判断しない（「京都」は「都」で終わるが「京都市」で探す必要がある）
+    if (!found.length) {
+      for (const suffix of ['市', '区', '町'].filter((s) => !q.endsWith(s))) {
         found = await searchPlaces(q + suffix);
         if (found.length) break;
       }
