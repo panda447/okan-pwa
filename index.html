@@ -3,15 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#080b0f">
+<meta name="theme-color" content="#edf1ea">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="おかん">
 <title>おかんアプリ</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script>
+// 明るい/暗いは描く前に決める（読み込み中に色がちらつかないように）。本体は js/theme.js
+(function () {
+  var pref = 'auto';
+  try { pref = (JSON.parse(localStorage.getItem('okan-pwa-db-v1') || '{}').settings || {}).theme || 'auto'; } catch (e) { /* 既定のまま */ }
+  var dark = pref === 'dark' || (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yomogi&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,17 +31,17 @@
 
 <nav class="tabbar" id="tabbar" aria-label="メインメニュー">
   <span class="tab-ind" aria-hidden="true"></span>
-  <a href="#/home" data-tab="home">ホーム<small>HOME</small></a>
-  <a href="#/schedules" data-tab="schedules">予定<small>PLAN</small></a>
-  <a href="#/shukatsu" data-tab="shukatsu">就活<small>JOB</small></a>
-  <a href="#/es" data-tab="es">ES<small>WRITE</small></a>
-  <a href="#/goals" data-tab="goals">目標<small>GOAL</small></a>
-  <a href="#/settings" data-tab="settings">設定<small>MORE</small></a>
+  <a href="#/home" data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10v9.5h11V10"/><path d="M10 19.5v-5h4v5"/></svg>ホーム</a>
+  <a href="#/schedules" data-tab="schedules"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>予定</a>
+  <a href="#/shukatsu" data-tab="shukatsu"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="8" width="17" height="11.5" rx="2.5"/><path d="M9 8V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v2M3.5 13h17"/></svg>就活</a>
+  <a href="#/es" data-tab="es"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h8l4 4v13h-12z"/><path d="M14.5 3.5v4h4M9.5 12h6M9.5 15.5h6"/></svg>ES</a>
+  <a href="#/goals" data-tab="goals"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m8.5 12.2 2.4 2.4 4.6-5"/></svg>目標</a>
+  <a href="#/settings" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h9M18 7h1M5 12h2M11 12h8M5 17h7M16 17h3"/><circle cx="16" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="14" cy="17" r="2"/></svg>設定</a>
 </nav>
 
 <dialog id="sheet"><form method="dialog" id="sheetForm" novalidate></form></dialog>
 <dialog id="confirm"><form method="dialog" id="confirmForm"></form></dialog>
-<div class="toasts" id="toasts"></div>
+<div class="toasts" id="toasts" role="status"></div>
 
 <script type="module" src="js/main.js"></script>
 </body>

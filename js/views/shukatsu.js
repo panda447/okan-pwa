@@ -1,8 +1,8 @@
 // 就活タブ。選考の一覧・パイプライン・内定管理・企業フィット、締切、分析、取り込み、マイページ情報。
 import {
-  FILTERS, PIPELINE_COLUMNS, WIN_STAGES, OFFER_DECISIONS, daysLeft, deadlineLevel, deadlineText, failStage, isActive,
+  FILTERS, PIPELINE_COLUMNS, WIN_STAGES, OFFER_DECISIONS, activeSequence, waitingDays, daysLeft, deadlineLevel, deadlineText, failStage, isActive,
   isPostWinDeclined, matchesFilter, moveStage, nextStage, normalizeEntry, offerSummary, overdueDeadlines, pipelineColumn,
-  previousStage, progressPercent, resultStages, searchText, seedHistory, sortEntries, stageTone, upcomingDeadlines,
+  previousStage, resultStages, searchText, seedHistory, sortEntries, stageTone, upcomingDeadlines,
 } from '../../lib/shukatsu/model.js';
 import { csvToCandidates, isUsableCandidate, parseMemo } from '../../lib/shukatsu/importer.js';
 import { decryptJson, encryptJson, isVaultBox } from '../../lib/shukatsu/vault.js';
@@ -19,11 +19,25 @@ const fmtDate = (key) => (key ? key.slice(5).replace('-', '/') : '');
 const stagePill = (stage) => `<span class="pill ${stageTone(stage)}">${esc(stage)}</span>`;
 
 // ---------- カード ----------
+/** 選考の道のり。フローの段を1本ずつ並べ、済んだ段・いまの段を塗る（段の数がそのまま見える）。 */
+function stepsBar(e) {
+  const seq = activeSequence(e);
+  const done = !isActive(e);
+  const i = seq.indexOf(e.stage);
+  // 不合格で終わったものは、落ちた段までを塗る（履歴から拾う。分からなければ全体を薄く）
+  const reached = done && !WIN_STAGES.has(e.stage)
+    ? Math.max(-1, ...(e.history || []).map((h) => seq.indexOf(h.from)))
+    : done ? seq.length - 1 : i;
+  const cls = WIN_STAGES.has(e.stage) ? 'win' : done ? 'lose' : '';
+  const label = done ? `${e.stage}で終了` : `${seq.length}段のうち${i + 1}段目（${e.stage}）`;
+  return `<div class="steps ${cls}" role="img" aria-label="${esc(label)}">${seq.map((_, k) => `<i class="${k < reached ? 'done' : k === reached ? (cls === 'win' ? 'done' : 'cur') : ''}"></i>`).join('')}</div>`;
+}
+
 function card(e) {
   const level = deadlineLevel(e);
   const done = !isActive(e);
   const next = nextStage(e);
-  const pct = progressPercent(e);
+  const waited = waitingDays(e);
   const meta = [e.type === 'インターン' && e.internSeason !== '未設定' ? `${e.internSeason}インターン` : e.type, e.industry !== '未設定' ? e.industry : '', e.role].filter(Boolean).join(' ・ ');
   const actions = done
     ? [
@@ -35,7 +49,7 @@ function card(e) {
       ? ['<button class="btn small primary" data-act="result">結果を入力</button>', '<button class="btn small ghost" data-act="back">‹ 戻す</button>']
       : [
         `<button class="btn small primary" data-act="next">次へ：${esc(next)}</button>`,
-        `<button class="btn small danger" data-act="fail">${esc(failStage(e))}</button>`,
+        `<button class="btn small danger" data-act="fail">${esc(failStage(e))}にする</button>`,
         e.history?.length ? '<button class="btn small ghost" data-act="back">‹ 戻す</button>' : '',
       ];
   return `
@@ -45,17 +59,17 @@ function card(e) {
         ${stagePill(isPostWinDeclined(e) ? `${e.stage}（辞退）` : e.stage)}
       </div>
       <div class="entry-meta">
-        ${e.deadline ? `<span class="${level ? `dl ${level}` : ''}">締切 ${esc(fmtDate(e.deadline))}・${esc(deadlineText(e.deadline))}</span>` : '<span class="faint">締切なし</span>'}
+        ${e.deadline && !done ? `<span class="${level ? `dl ${level}` : daysLeft(e.deadline) < 0 ? 'dl critical' : ''}">締切 ${esc(fmtDate(e.deadline))}・${esc(deadlineText(e.deadline))}</span>` : ''}
+        ${waited ? `<span class="${waited >= 10 ? 'dl soon' : ''}">結果待ち ${waited}日</span>` : ''}
         ${e.nextDate ? `<span>次：${esc(fmtDate(e.nextDate))}${e.nextTime ? ` ${esc(e.nextTime)}` : ''} ${esc(e.nextPlan)}</span>` : ''}
         ${e.stage === '内定' ? `<span class="${e.offerDecision === '検討中' && daysLeft(e.offerResponseDeadline) !== null && daysLeft(e.offerResponseDeadline) <= 7 ? 'dl soon' : ''}">内定：${esc(e.offerDecision)}${e.offerResponseDeadline ? `・回答 ${esc(deadlineText(e.offerResponseDeadline))}` : ''}</span>` : ''}
       </div>
-      <div class="bar ${pct === 100 && WIN_STAGES.has(e.stage) ? 'done' : ''}"><i data-k="entry-${esc(e.id)}" style="width:${pct}%"></i></div>
+      ${stepsBar(e)}
       ${e.selectionTags?.length ? `<div class="tags">${e.selectionTags.map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
-      <div class="entry-actions">
-        ${actions.join('')}
-        <span class="grow"></span>
-        ${e.portalUrl ? `<a class="btn small ghost" href="${esc(e.portalUrl)}" target="_blank" rel="noopener noreferrer">マイページ</a>` : ''}
-        <button class="btn small ghost" data-act="login" title="ログイン情報">ID</button>
+      <div class="entry-actions">${actions.join('')}</div>
+      <div class="entry-sub">
+        ${e.portalUrl ? `<a class="btn small ghost" href="${esc(e.portalUrl)}" target="_blank" rel="noopener noreferrer">マイページを開く</a>` : ''}
+        <button class="btn small ghost" data-act="login">ログイン情報</button>
         <button class="btn small ghost" data-act="timeline">履歴</button>
         <button class="btn small ghost" data-act="edit">編集</button>
       </div>
@@ -69,8 +83,21 @@ function bindCards(root) {
       const e = entry();
       if (!e) return;
       const act = b.dataset.act;
-      if (act === 'next') { burst(b, 12); replaceEntry(moveStage(e, nextStage(e), 'advance')); }
-      else if (act === 'fail') replaceEntry(moveStage(e, failStage(e), 'fail'));
+      if (act === 'next') {
+        burst(b, 12);
+        const moved = moveStage(e, nextStage(e), 'advance');
+        replaceEntry(moved);
+        // 押し間違いをその場で戻せるように。締切を外したときは、そのことも伝える
+        toast(e.company, `${moved.stage}に進めました${e.deadline ? '（締切は済みにしました）' : ''}。`, {
+          action: { label: '元に戻す', run: () => { const cur = state.db.entries.find((x) => x.id === e.id); if (cur?.stage === moved.stage) replaceEntry(moveStage(cur, previousStage(cur), 'back')); } },
+        });
+      }
+      else if (act === 'fail') {
+        replaceEntry(moveStage(e, failStage(e), 'fail'));
+        toast(e.company, `${failStage(e)}として記録しました。`, {
+          action: { label: '元に戻す', run: () => { const cur = state.db.entries.find((x) => x.id === e.id); if (cur && !isActive(cur)) replaceEntry(moveStage(cur, previousStage(cur), 'back')); } },
+        });
+      }
       else if (act === 'back') replaceEntry(moveStage(e, previousStage(e), 'back'));
       else if (act === 'result') openResult(e);
       else if (act === 'decline') toggleDecline(e);
@@ -91,8 +118,8 @@ function openResult(e) {
       ${segmented('result', [{ value: 'win', label: win }, { value: 'lose', label: lose }], 'win')}
       <div data-win-only style="margin-top:12px">
         ${e.type === 'インターン'
-          ? `<label class="field">参加日（任意）<input name="internStart" inputmode="numeric" value="${esc(e.internStart)}" placeholder="2026-12-09"></label>`
-          : `<label class="field">内定の回答期限（任意）<input name="offerResponseDeadline" inputmode="numeric" value="${esc(e.offerResponseDeadline)}" placeholder="2026-12-01"></label>`}
+          ? `<label class="field">参加日（任意）<input name="internStart" type="date" value="${esc(e.internStart)}" placeholder="2026-12-09"></label>`
+          : `<label class="field">内定の回答期限（任意）<input name="offerResponseDeadline" type="date" value="${esc(e.offerResponseDeadline)}" placeholder="2026-12-01"></label>`}
       </div>`,
     submitLabel: '記録する',
     onOpen(form) {
@@ -103,7 +130,7 @@ function openResult(e) {
       const extra = {};
       const date = String(v.internStart ?? v.offerResponseDeadline ?? '').trim();
       if (isWin && date) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return '日付は YYYY-MM-DD の形式で入力してください。';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return '日付を確かめてください。';
         if (e.type === 'インターン') Object.assign(extra, { internMode: 'single', internStart: date });
         else extra.offerResponseDeadline = date;
       }
@@ -126,14 +153,14 @@ function openOffer(e) {
   openSheet({
     title: `${e.company} の内定`,
     bodyHtml: `
-      <label class="field">回答期限<input name="offerResponseDeadline" inputmode="numeric" value="${esc(e.offerResponseDeadline)}" placeholder="2026-12-01"></label>
+      <label class="field">回答期限<input name="offerResponseDeadline" type="date" value="${esc(e.offerResponseDeadline)}" placeholder="2026-12-01"></label>
       <p class="muted" style="margin:0 0 6px">判断</p>
       ${segmented('offerDecision', OFFER_DECISIONS.map((d) => ({ value: d, label: d })), e.offerDecision)}
       <label class="field" style="margin-top:12px">職種・配属<input name="offerRole" value="${esc(e.offerRole || e.role)}"></label>
       <label class="field">条件・迷っている点など<textarea name="offerMemo" rows="4">${esc(e.offerMemo)}</textarea></label>`,
     onSubmit(v) {
       const d = String(v.offerResponseDeadline).trim();
-      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return '回答期限は YYYY-MM-DD の形式で入力してください。';
+      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return '回答期限の日付を確かめてください。';
       updateEntry(e.id, { offerResponseDeadline: d, offerDecision: v.offerDecision, offerRole: v.offerRole.trim(), offerMemo: v.offerMemo.trim(), declinedAfterWin: v.offerDecision === '辞退' });
     },
   });
@@ -148,7 +175,7 @@ function openTimeline(e) {
     title: `${e.company} の選考履歴`,
     bodyHtml: `<p class="muted">登録 ${esc(new Date(e.created_at).toLocaleDateString('ja-JP'))}・いま ${esc(e.stage)}</p>
       <div class="list">${rows || '<div class="empty">まだ履歴はありません。「次へ」などで段階を動かすと残ります。</div>'}</div>
-      ${e.memo ? `<div class="eyebrow">MEMO</div><p style="white-space:pre-wrap">${esc(e.memo)}</p>` : ''}`,
+      ${e.memo ? `<div class="eyebrow">メモ</div><p style="white-space:pre-wrap">${esc(e.memo)}</p>` : ''}`,
     submitLabel: '閉じる',
     onSubmit() {},
   });
@@ -270,7 +297,7 @@ function openImport(mode = 'memo', message = '') {
           <input type="file" id="csvFile" accept=".csv,text/csv">`}
       </div>
       ${message ? `<p class="muted" style="margin-top:10px">${esc(message)}</p>` : ''}
-      ${importCandidates.length ? `<div class="eyebrow" style="margin-top:14px">PREVIEW</div><p class="faint">チェックした行を取り込みます。企業名はここで直せます。段階や締切は取り込んだあと「編集」で直せます。</p><div class="list">${candidateRows()}</div>` : ''}`,
+      ${importCandidates.length ? `<div class="eyebrow" style="margin-top:14px">読み取った内容</div><p class="faint">チェックした行を取り込みます。企業名はここで直せます。段階や締切は取り込んだあと「編集」で直せます。</p><div class="list">${candidateRows()}</div>` : ''}`,
     submitLabel: importCandidates.length ? `取り込む` : '閉じる',
     onOpen(form) {
       form.addEventListener('change', (ev) => {
@@ -369,7 +396,7 @@ function summaryBlock() {
 export function renderShukatsu(root) {
   const views = { list: listView, pipeline: pipelineView, offers: offersView, fit: null };
   root.innerHTML = `
-    ${header({ eyebrow: 'SELECTION', title: '就活', sub: '選考と締切の管理', actions: '<button class="btn" id="importBtn">取り込み</button><button class="btn" id="analyticsBtn">分析</button><button class="btn primary icon-btn" id="addEntry" aria-label="選考を追加">＋</button>' })}
+    ${header({ title: '就活', sub: '選考と締切の管理', actions: '<button class="btn" id="importBtn">取り込み</button><button class="btn" id="analyticsBtn">分析</button><button class="btn primary icon-btn" id="addEntry" aria-label="選考を追加">＋</button>' })}
     ${summaryBlock()}
     <div class="viewseg">${segmented('view', [{ value: 'list', label: '一覧' }, { value: 'pipeline', label: 'パイプライン' }, { value: 'offers', label: '内定' }, { value: 'fit', label: 'フィット' }], ui.view)}</div>
     <div id="subview">${views[ui.view] ? views[ui.view]() : ''}</div>`;

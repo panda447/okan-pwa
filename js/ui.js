@@ -4,8 +4,8 @@ export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-export function header({ eyebrow, title, sub = '', actions = '' }) {
-  return `<header class="head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1>${sub ? `<p class="sub">${esc(sub)}</p>` : ''}</div><div class="actions">${actions}</div></header>`;
+export function header({ title, sub = '', actions = '' }) {
+  return `<header class="head"><div><h1>${esc(title)}</h1>${sub ? `<p class="sub">${esc(sub)}</p>` : ''}</div><div class="actions">${actions}</div></header>`;
 }
 
 export function listOrEmpty(rowsHtml, emptyLines) {
@@ -75,14 +75,23 @@ export function confirmDialog({ title, target, message = 'この操作は元に�
   });
 }
 
-export function toast(title, body) {
+/**
+ * 画面内のお知らせ。押すと消える。
+ * okan: true はおかんの声かけ（紙の色・少し長く出す）。action を渡すと「元に戻す」などのボタンが付く。
+ */
+export function toast(title, body, { okan = false, action = null } = {}) {
   const wrap = document.getElementById('toasts');
   const el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = `<b>${esc(title)}</b>${esc(body)}`;
+  el.className = `toast${okan ? ' okan' : ''}`;
+  el.innerHTML = `<b>${esc(title)}</b>${esc(body)}${action ? ` <button type="button" class="btn small" style="margin-left:8px">${esc(action.label)}</button>` : ''}`;
   wrap.appendChild(el);
-  setTimeout(() => el.remove(), 8000);
-  el.addEventListener('click', () => el.remove());
+  // 同時に出すのは3つまで（古いものから消す）
+  [...wrap.children].slice(0, -3).forEach((old) => old.remove());
+  setTimeout(() => el.remove(), okan ? 8000 : action ? 6000 : 3500);
+  el.addEventListener('click', (ev) => {
+    if (action && ev.target.closest('button')) action.run();
+    el.remove();
+  });
 }
 
 export function badge(type, label) {

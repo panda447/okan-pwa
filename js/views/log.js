@@ -16,6 +16,6 @@ export function renderLog(root) {
       <div style="display:flex;gap:8px;align-items:center"><span class="time" style="width:auto">${esc(formatTime(i.sent_at ?? i.created_at))}</span>${badge(i.trigger_type, LABELS[i.trigger_type] ?? i.trigger_type)}</div>
       <b style="font-weight:600;margin-top:4px">${esc(i.message)}</b>${i.reason ? `<span class="faint">${esc(i.reason)}</span>` : ''}</div></div>`).join('')}</div>`).join('');
   root.innerHTML = `
-    ${header({ eyebrow: 'LOG', title: '記録', sub: 'おかんが声をかけた履歴' })}
+    ${header({ title: '記録', sub: 'おかんが声をかけた履歴' })}
     ${html || listOrEmpty('', ['まだおかんは何も言っていません。', '予定や目標を登録すると声をかけてくれます。'])}`;
 }

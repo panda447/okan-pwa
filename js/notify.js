@@ -63,7 +63,7 @@ async function showSystemNotification(title, body) {
 async function deliver(title, body) {
   let delivered = false;
   if (document.visibilityState === 'visible') {
-    toast(title, body);
+    toast(title, body, { okan: true });
     delivered = true;
   }
   if (supported && Notification.permission === 'granted') {
@@ -90,7 +90,7 @@ async function runPlanned(now) {
     const firedKey = schedule ? `${item.key}|${schedule.start_at}` : `${item.key}|${toDateInput(now)}`;
     if (fired.has(firedKey)) continue;
 
-    if (await deliver('おかんから', item.body)) {
+    if (await deliver('おかんより', item.body)) {
       fired.add(firedKey);
       rememberFired(fired);
       const isSchedule = Boolean(schedule);
@@ -120,7 +120,7 @@ async function runReactive(now) {
   const decision = decideNotification({ trigger: message.trigger, settings: context.settings, now, sent });
   if (!decision.send) return;
 
-  if (await deliver('おかんから', message.text)) {
+  if (await deliver('おかんより', message.text)) {
     recordIntervention({ trigger: message.trigger, message: message.text, sentAt: new Date() });
   } else {
     handledKey = null; // 届けられなかった用件は、次の判定でもう一度拾う

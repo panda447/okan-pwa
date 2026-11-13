@@ -23,15 +23,15 @@ function resultHtml(r) {
   const tone = r.total >= 80 ? 'ok' : r.total >= 60 ? 'warn' : 'danger';
   return `
     <section class="card">
-      <div class="eyebrow">RESULT</div>
+      
       <div class="score-row"><div class="score ${tone}">${r.total}<small>/100</small></div>
         <div class="muted">${r.stats.chars}字・${r.stats.sentences}文（1文平均${r.stats.avgSentence}字、最長${r.stats.longestSentence}字）・数字${r.stats.numbers}個</div></div>
       <p class="faint">決まったルールで数えた機械チェックです（AIではありません）。中身の良し悪しや企業との合い方までは見ていないので、下の「Claudeに添削を頼む」と組み合わせてください。</p>
       ${r.criteria.map((c) => `<div class="stat"><div class="top"><span>${esc(c.label)}</span><b>${c.score} / 20</b></div><div class="bar"><i style="width:${c.score * 5}%"></i></div>
         <div class="faint">${c.hits.length ? `見つかった言葉：${esc(c.hits.slice(0, 8).join('、'))}` : '手がかりになる言葉が見つかりません'}</div></div>`).join('')}
     </section>
-    ${r.deductions.length ? `<section class="card"><div class="eyebrow">DEDUCTIONS</div><h2>減点</h2><ul>${r.deductions.map((d) => `<li><b>-${d.points} ${esc(d.label)}</b><br><span class="muted">${esc(d.detail)}</span></li>`).join('')}</ul></section>` : ''}
-    ${r.improvements.length ? `<section class="card"><div class="eyebrow">TO 90+</div><h2>点を上げるには（効く順）</h2><ol>${r.improvements.slice(0, 5).map((t) => `<li>${esc(t)}</li>`).join('')}</ol></section>` : '<section class="card"><p>ルール上の指摘はありません。</p></section>'}`;
+    ${r.deductions.length ? `<section class="card"><h2>減点</h2><ul>${r.deductions.map((d) => `<li><b>-${d.points} ${esc(d.label)}</b><br><span class="muted">${esc(d.detail)}</span></li>`).join('')}</ul></section>` : ''}
+    ${r.improvements.length ? `<section class="card"><h2>点を上げるには（効く順）</h2><ol>${r.improvements.slice(0, 5).map((t) => `<li>${esc(t)}</li>`).join('')}</ol></section>` : '<section class="card"><p>ルール上の指摘はありません。</p></section>'}`;
 }
 
 function reviewView() {
@@ -39,7 +39,7 @@ function reviewView() {
   const over = Number(draft.limit) > 0 && chars > Number(draft.limit);
   return `
     <form class="card" id="esForm" novalidate>
-      <div class="eyebrow">INPUT</div><h2>添削するES</h2>
+      <h2>添削するES</h2>
       <label class="field">企業名（任意）<input name="company" list="esCompanies" value="${esc(draft.company)}" autocomplete="off"><datalist id="esCompanies">${companies().map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
       <label class="field">設問（任意）<input name="question" value="${esc(draft.question)}" placeholder="学生時代に力を入れたことを教えてください"></label>
       <label class="field">文字数の上限（任意）<input name="limit" inputmode="numeric" value="${esc(draft.limit)}" placeholder="400"></label>
@@ -110,7 +110,7 @@ function openItem(id, preset = {}) {
 
 export function renderEs(root) {
   root.innerHTML = `
-    ${header({ eyebrow: 'ENTRY SHEET', title: 'ES', sub: '添削とアーカイブ', actions: ui.view === 'archive' ? '<button class="btn primary icon-btn" id="addItem" aria-label="ESを追加">＋</button>' : '' })}
+    ${header({ title: 'ES', sub: '添削とアーカイブ', actions: ui.view === 'archive' ? '<button class="btn primary icon-btn" id="addItem" aria-label="ESを追加">＋</button>' : '' })}
     <div class="viewseg">${segmented('esview', [{ value: 'review', label: '添削' }, { value: 'archive', label: `アーカイブ（${state.db.es_items.length}）` }], ui.view)}</div>
     <div id="esSub">${ui.view === 'review' ? reviewView() : archiveView()}</div>`;
   $$('[name=esview]', root).forEach((r) => r.addEventListener('change', () => { ui.view = r.value; renderEs(root); }));

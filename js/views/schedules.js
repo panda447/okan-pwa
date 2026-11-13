@@ -1,5 +1,5 @@
 import {
-  formatDateInput, formatTimeInput, formatTimeRange, groupByLocalDate, localDateKey,
+  formatTimeRange, groupByLocalDate, localDateKey,
   parseLocalDateTime, toDateInput, toTimeInput,
 } from '../../lib/datetime.js';
 import { addSchedule, deleteSchedule, sortedSchedules, state, updateSchedule } from '../store.js';
@@ -22,10 +22,10 @@ function scheduleBody(initial, presetDate) {
   const start = initial ? new Date(initial.start_at) : new Date();
   return `
     <label class="field">タイトル<input name="title" value="${esc(initial?.title ?? '')}" placeholder="授業、バイト など" autocomplete="off"></label>
-    <label class="field">日付<input name="date" inputmode="numeric" value="${esc(initial ? toDateInput(start) : (presetDate ?? toDateInput(start)))}" placeholder="2026-10-21"></label>
+    <label class="field">日付<input name="date" type="date" value="${esc(initial ? toDateInput(start) : (presetDate ?? toDateInput(start)))}" placeholder="2026-10-21"></label>
     <div class="two">
-      <label class="field">開始時刻<input name="start" inputmode="numeric" value="${esc(initial ? toTimeInput(start) : '')}" placeholder="10:00"></label>
-      <label class="field">終了時刻（任意）<input name="end" inputmode="numeric" value="${esc(initial?.end_at ? toTimeInput(new Date(initial.end_at)) : '')}" placeholder="12:00"></label>
+      <label class="field">開始時刻<input name="start" type="time" value="${esc(initial ? toTimeInput(start) : '')}" placeholder="10:00"></label>
+      <label class="field">終了時刻（任意）<input name="end" type="time" value="${esc(initial?.end_at ? toTimeInput(new Date(initial.end_at)) : '')}" placeholder="12:00"></label>
     </div>
     <label class="field">場所（任意）<input name="location" value="${esc(initial?.location ?? '')}"></label>
     <label class="field">メモ（任意）<textarea name="description" rows="2">${esc(initial?.description ?? '')}</textarea></label>`;
@@ -35,11 +35,11 @@ function scheduleBody(initial, presetDate) {
 function parseScheduleForm(v) {
   if (!v.title.trim()) return { error: 'タイトルを入力してください。' };
   const start = parseLocalDateTime(v.date, v.start);
-  if (!start) return { error: '日付は YYYY-MM-DD、開始時刻は HH:MM の形式で入力してください。' };
+  if (!start) return { error: '日付と開始時刻を入れてください。' };
   let end = null;
   if (v.end.trim()) {
     end = parseLocalDateTime(v.date, v.end);
-    if (!end) return { error: '終了時刻は HH:MM の形式で入力してください。' };
+    if (!end) return { error: '終了時刻を確かめてください。' };
     if (end <= start) return { error: '終了時刻は開始時刻より後にしてください。' };
   }
   return {
@@ -53,20 +53,12 @@ function parseScheduleForm(v) {
   };
 }
 
-function bindMasks(form) {
-  const mask = (name, fn) => $(`[name=${name}]`, form).addEventListener('input', (e) => { e.target.value = fn(e.target.value); });
-  mask('date', formatDateInput);
-  mask('start', formatTimeInput);
-  mask('end', formatTimeInput);
-}
-
 export function openScheduleForm(id, presetDate) {
   const initial = id ? state.db.schedules.find((s) => s.id === id) : null;
   openSheet({
     title: initial ? '予定を編集' : '予定を追加',
     submitLabel: initial ? '保存する' : '追加する',
     bodyHtml: scheduleBody(initial, presetDate),
-    onOpen: bindMasks,
     onSubmit(v) {
       const r = parseScheduleForm(v);
       if (r.error) return r.error;
@@ -133,13 +125,21 @@ function openCalendar() {
 }
 
 export function renderSchedules(root) {
-  const sections = groupByLocalDate(sortedSchedules(), (s) => s.start_at);
   const todayKey = toDateInput(new Date());
-  const html = sections.map((sec) => `
+  const all = groupByLocalDate(sortedSchedules(), (s) => s.start_at);
+  // 過ぎた日はたたんでおく（開けば新しい順に見られる）。今日より前の予定で画面が埋まらないように
+  const past = all.filter((sec) => sec.key < todayKey).reverse();
+  const pastCount = past.reduce((n, sec) => n + sec.data.length, 0);
+  const section = (sec) => `
     <div class="date-head ${sec.key === todayKey ? 'today' : ''}">${esc(sec.title)}${sec.key === todayKey ? '（今日）' : ''}</div>
-    <div class="list">${sec.data.map((s) => `<div class="row click" data-edit="${esc(s.id)}"><span class="time">${esc(formatTimeRange(s.start_at, s.end_at))}</span><div class="main"><b>${esc(s.title)}</b>${s.location ? `<span class="faint">${esc(s.location)}</span>` : ''}</div><span class="chev">›</span></div>`).join('')}</div>`).join('');
+    <div class="list">${sec.data.map((s) => `<div class="row click" data-edit="${esc(s.id)}"><span class="time">${esc(formatTimeRange(s.start_at, s.end_at))}</span><div class="main"><b>${esc(s.title)}</b>${s.location ? `<span class="faint">${esc(s.location)}</span>` : ''}</div><span class="chev">›</span></div>`).join('')}</div>`;
+  const upcoming = all.filter((sec) => sec.key >= todayKey).map(section).join('');
+  const html = state.db.schedules.length
+    ? `${upcoming || listOrEmpty('', ['これからの予定はありません。', '右上の＋から追加できます。'])}
+       ${pastCount ? `<details class="past"><summary>過ぎた予定（${pastCount}件）</summary>${past.map(section).join('')}</details>` : ''}`
+    : '';
   root.innerHTML = `
-    ${header({ eyebrow: 'PLAN', title: '予定', sub: `${state.db.schedules.length}件`, actions: '<button class="btn" id="openCal">カレンダー</button><button class="btn primary icon-btn" id="addSchedule" aria-label="予定を追加">＋</button>' })}
+    ${header({ title: '予定', sub: `これから ${all.filter((sec) => sec.key >= todayKey).reduce((n, sec) => n + sec.data.length, 0)}件`, actions: '<button class="btn" id="openCal">カレンダー</button><button class="btn primary icon-btn" id="addSchedule" aria-label="予定を追加">＋</button>' })}
     ${html || listOrEmpty('', ['まだ予定がありません。', '右上の＋から追加してください。'])}`;
   $('#addSchedule', root).addEventListener('click', () => openScheduleForm(null));
   $('#openCal', root).addEventListener('click', openCalendar);
